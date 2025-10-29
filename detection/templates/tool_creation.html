@@ -1,0 +1,385 @@
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tool Creation</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .field-label { font-weight:600; }
+    .card { transition: box-shadow .15s ease; }
+    .card:hover { box-shadow: 0 8px 30px rgba(2,6,23,.08); }
+    .small { font-size: .9rem }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <div class="max-w-6xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">Tool Creation</h1>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Form -->
+      <section class="lg:col-span-1 bg-white p-4 rounded-lg card">
+        <h2 class="text-lg font-semibold mb-3">Add / Edit Tool</h2>
+        <form id="toolForm" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" id="internal_id" name="internal_id">
+
+          <div>
+            <label class="field-label small">Tool ID</label>
+            <div class="flex gap-2 mt-1">
+              <input id="tool_id" name="tool_id" class="flex-1 border rounded px-3 py-2 small" placeholder="Auto-generated TL-xxxx" readonly value="{{ generate_tool_id }}">
+              <button type="button" id="regenId" class="px-3 py-2 bg-blue-600 text-white rounded small">Generate</button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Primary DB key is internal auto id.</p>
+          </div>
+
+          <div>
+            <label class="field-label small">Tool Name</label>
+            <input id="tool_name" name="tool_name" required class="w-full border rounded px-3 py-2 small" placeholder="e.g., Torque Wrench">
+          </div>
+
+          <div>
+            <label class="field-label small">Description</label>
+            <textarea id="description" name="description" class="w-full border rounded px-3 py-2 small" rows="3" placeholder="Detailed description..."></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="field-label small">Part Number</label>
+              <input id="part_number" name="part_number" class="w-full border rounded px-3 py-2 small" placeholder="PN-1234">
+            </div>
+            <div>
+              <label class="field-label small">Brand</label>
+              <input id="brand" name="brand" class="w-full border rounded px-3 py-2 small" placeholder="Brand name">
+            </div>
+          </div>
+
+          <div>
+            <label class="field-label small">Tool Type</label>
+            <select id="tool_type" name="tool_type" class="w-full border rounded px-3 py-2 small">
+              <option value="">Select type</option>
+              <option>Cutting</option>
+              <option>Measuring</option>
+              <option>Detection</option>
+              <option>Preprocessing</option>
+              <option>Maintenance</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="field-label small">Remarks</label>
+              <input id="remarks" name="remarks" class="w-full border rounded px-3 py-2 small" placeholder="Optional">
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-2">
+            <button type="submit" id="saveBtn" class="flex-1 px-4 py-2 bg-green-600 text-white rounded">Save</button>
+            <button type="button" id="resetBtn" class="px-4 py-2 bg-gray-200 rounded">Reset</button>
+            <button type="button" id="backBtn" class="px-4 py-2 bg-blue-500 text-white rounded" onclick="window.location.href='{% url 'dashboard' %}'">Back</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- List & Tools -->
+      <section class="lg:col-span-2 bg-white p-4 rounded-lg card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">Tool Master List</h2>
+          <input id="search" placeholder="Search by name, brand, part no" class="border rounded px-3 py-2 small">
+        </div>
+
+        <div class="overflow-auto max-h-96">
+          <table class="w-full text-left text-sm">
+            <thead class="text-gray-600 border-b">
+              <tr>
+                <th class="px-2 py-2">#</th>
+                <th class="px-2 py-2">Tool ID</th>
+                <th class="px-2 py-2">Name</th>
+                <th class="px-2 py-2">Brand</th>
+                <th class="px-2 py-2">Part No</th>
+                <th class="px-2 py-2">Type</th>
+                <th class="px-2 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="toolTableBody">
+              {% for tool in tools %}
+              <tr class="border-b hover:bg-gray-50 small">
+                <td class="px-2 py-2">{{ forloop.counter }}</td>
+                <td class="px-2 py-2">{{ tool.tool_id }}</td>
+                <td class="px-2 py-2">{{ tool.tool_name }}</td>
+                <td class="px-2 py-2">{{ tool.brand }}</td>
+                <td class="px-2 py-2">{{ tool.part_number }}</td>
+                <td class="px-2 py-2">{{ tool.tool_type }}</td>
+                <td class="px-2 py-2 small">
+                  <div class="flex flex-row flex-nowrap gap-1">
+                     <button data-id="{{ tool.id }}" class="editBtn px-2 py-1 mr-1 bg-yellow-400 rounded">Edit</button>
+                     <button data-id="{{ tool.id }}" class="deleteBtn px-2 py-1 bg-red-500 text-white rounded">Delete</button>
+                     <button data-id="{{ tool.id }}" data-name="{{ tool.tool_name }}" class="purchaseBtn px-2 py-1 bg-blue-500 text-white rounded">Purchase</button>
+
+                  </div>
+
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="8" class="px-2 py-2 text-gray-500">No tools found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tool Purchase Modal -->
+        <div id="purchaseModal" class="fixed inset-0 bg-black bg-opacity-40 hidden justify-center items-center">
+          <div class="bg-white rounded-lg p-6 w-96 relative">
+            <h2 class="text-lg font-semibold mb-3">Tool Purchase</h2>
+            <form id="purchaseForm">
+              {% csrf_token %}
+              <input type="hidden" name="tool_id" id="modal_tool_id">
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Tool Name</label>
+                <input type="text" id="modal_tool_name" class="w-full border rounded px-3 py-2" readonly>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Supplier Name</label>
+                <input type="text" name="supplier_name" class="w-full border rounded px-3 py-2" required>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Invoice Number</label>
+                <input type="text" name="invoice_number" class="w-full border rounded px-3 py-2" required>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Quantity</label>
+                <input type="float" name="quantity" class="w-full border rounded px-3 py-2" required>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Unit Cost</label>
+                <input type="float" name="unit_cost" class="w-full border rounded px-3 py-2" required>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Purchase Cost</label>
+                <input type="float" name="purchase_cost" class="w-full border rounded px-3 py-2" required>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Purchase Date</label>
+                <input type="date" name="purchase_date" class="w-full border rounded px-3 py-2" required>
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Calibration (optional)</label>
+                <input type="date" name="calibration" class="w-full border rounded px-3 py-2">
+              </div>
+              <div class="mb-2">
+                <label class="block text-sm font-semibold">Remarks</label>
+                <input type="text" name="remarks" class="w-full border rounded px-3 py-2">
+              </div>
+              <div class="flex justify-end gap-2 mt-3">
+                <button type="button" id="closeModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+      </section>
+    </main>
+
+  </div>
+
+<script>
+  // Function to generate Tool ID like TL-20251029-6F3A
+function generateToolId() {
+    const now = new Date();
+    const date = now.toISOString().slice(0,10).replace(/-/g,'');
+    const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+    return `TL-${date}-${rand}`;
+}
+
+// Set Tool ID on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const toolIdInput = document.getElementById('tool_id');
+    if(!toolIdInput.value) toolIdInput.value = generateToolId();
+});
+
+// Regenerate ID on "Generate" button click
+document.getElementById('regenId').addEventListener('click', () => {
+    document.getElementById('tool_id').value = generateToolId();
+});
+
+// Form submission
+document.getElementById('toolForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const formData = new FormData(this);
+    fetch("{% url 'tool_creation' %}", {
+        method:'POST',
+        body: formData,
+        headers:{'X-CSRFToken':'{{ csrf_token }}','X-Requested-With':'XMLHttpRequest'}
+    }).then(res => res.json()).then(data => {
+        if(data.status=='success'){
+            alert('Tool saved successfully');
+            location.reload();
+        } else {
+            alert('Error: '+JSON.stringify(data.errors));
+        }
+    });
+});
+
+function generateToolId() {
+  const now = new Date();
+  const date = now.toISOString().slice(0,10).replace(/-/g,'');
+  const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+  return `TL-${date}-${rand}`;
+}
+
+document.getElementById('regenId').onclick = () => {
+  document.getElementById('tool_id').value = generateToolId();
+};
+
+document.getElementById('resetBtn').onclick = () => {
+  document.getElementById('toolForm').reset();
+  document.getElementById('tool_id').value = generateToolId();
+  document.getElementById('internal_id').value = '';
+};
+
+function attachActions(){
+  document.querySelectorAll('.deleteBtn').forEach(btn => {
+    btn.onclick = function(){
+      if(confirm('Delete this tool?')){
+        fetch(`/tool_creation/delete/${btn.dataset.id}/`,{
+          method:'POST',
+          headers:{
+            'X-CSRFToken':'{{ csrf_token }}',
+            'X-Requested-With':'XMLHttpRequest'
+          }
+        }).then(res=>res.json()).then(data=>{
+          if(data.status=='success') location.reload();
+        });
+      }
+    }
+  });
+
+  document.querySelectorAll('.editBtn').forEach(btn => {
+    btn.onclick = function(){
+      const row = btn.closest('tr');
+      document.getElementById('internal_id').value = btn.dataset.id;
+      document.getElementById('tool_id').value = row.children[1].innerText;
+      document.getElementById('tool_name').value = row.children[2].innerText;
+      document.getElementById('brand').value = row.children[3].innerText;
+      document.getElementById('part_number').value = row.children[4].innerText;
+      document.getElementById('tool_type').value = row.children[5].innerText;
+      document.getElementById('calibration').value = row.children[6].innerText==='-'?'':row.children[6].innerText;
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+  });
+}
+
+attachActions();
+
+document.getElementById('toolForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  const formData = new FormData(this);
+  fetch("{% url 'tool_creation' %}",{
+    method:'POST',
+    body: formData,
+    headers:{'X-CSRFToken':'{{ csrf_token }}','X-Requested-With':'XMLHttpRequest'}
+  }).then(res=>res.json()).then(data=>{
+    if(data.status=='success'){
+      alert('Tool saved successfully');
+      location.reload();
+    } else {
+      alert('Error: '+JSON.stringify(data.errors));
+    }
+  });
+});
+
+  // Search filter for tool table
+function filterTools() {
+    const query = document.getElementById('search').value.toLowerCase();
+    const rows = document.querySelectorAll('#toolTableBody tr');
+
+    rows.forEach(row => {
+        // Skip empty rows (e.g., colspan="8")
+        if(row.querySelector('td[colspan]')) return;
+
+        const toolId = row.children[1].innerText.toLowerCase();
+        const toolName = row.children[2].innerText.toLowerCase();
+        const brand = row.children[3].innerText.toLowerCase();
+        const partNumber = row.children[4].innerText.toLowerCase();
+
+        if(toolId.includes(query) || toolName.includes(query) || brand.includes(query) || partNumber.includes(query)){
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Listen for search input
+document.getElementById('search').addEventListener('input', filterTools);
+
+// Re-apply search after table updates
+function reloadTableAndAttachActions() {
+    attachActions();
+    filterTools(); // keep filtered results even after save/delete
+}
+
+// Open modal when Purchase button is clicked
+document.querySelectorAll('.purchaseBtn').forEach(btn => {
+    btn.onclick = () => {
+        const modal = document.getElementById('purchaseModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        // Fill tool info
+        document.getElementById('modal_tool_id').value = btn.dataset.id;
+        document.getElementById('modal_tool_name').value = btn.dataset.name;
+    };
+});
+
+// Close modal
+document.getElementById('closeModal').onclick = () => {
+    const modal = document.getElementById('purchaseModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+};
+
+// 🧮 Auto-calculate Purchase Cost (quantity * unit cost)
+const quantityInput = document.querySelector('input[name="quantity"]');
+const unitCostInput = document.querySelector('input[name="unit_cost"]');
+const purchaseCostInput = document.querySelector('input[name="purchase_cost"]');
+
+function calculatePurchaseCost() {
+    const qty = parseFloat(quantityInput.value) || 0;
+    const unitCost = parseFloat(unitCostInput.value) || 0;
+    const total = qty * unitCost;
+    purchaseCostInput.value = total.toFixed(2);
+}
+
+quantityInput.addEventListener('input', calculatePurchaseCost);
+unitCostInput.addEventListener('input', calculatePurchaseCost);
+
+// Submit purchase form via AJAX
+document.getElementById('purchaseForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    fetch("{% url 'tool_purchase' %}", {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    }).then(res => res.json()).then(data => {
+        if(data.status=='success'){
+            alert('Purchase saved successfully');
+            location.reload();
+        } else {
+            alert('Error saving purchase');
+        }
+    });
+});
+</script>
+
+</body>
+</html>
