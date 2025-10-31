@@ -1,11 +1,15 @@
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404
 from .models import ToolCreation, ToolPurchase, Inventory
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from .models import ServiceStation, Unit, Tray, Inventory, TrayTool
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
 
 def login_view(request):
     if request.method == 'POST':
@@ -124,5 +128,247 @@ def inventory_view(request):
             'lastUpdated': item.last_updated.strftime('%Y-%m-%d %H:%M'),
             'remarks': item.remarks or '',
         })
-
     return render(request, 'inventory.html', {'inventory_data': inventory_data})
+
+@login_required
+def create_service_station(request):
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        location = request.POST.get('location')
+        manager_id = request.POST.get('manager')
+        remarks = request.POST.get('remarks')
+        manager = User.objects.filter(id=manager_id).first() if manager_id else None
+
+        station = ServiceStation.objects.create(
+            name=name,
+            location=location,
+            manager=manager,
+            remarks=remarks
+        )
+        return redirect('service_station_list')
+
+    users = User.objects.all()
+    return render(request, 'create_service_station.html', {'users': users})
+
+
+@login_required
+def service_station_list(request):
+    stations = ServiceStation.objects.all().order_by('id')
+    users = User.objects.all()  # For incharge dropdown if using modal
+    context = {
+        'stations': stations,
+        'users': users,
+    }
+    return render(request, 'service_station_list.html', context)
+
+@login_required
+def create_unit(request, station_id):
+    station = get_object_or_404(ServiceStation, id=station_id)
+    users = User.objects.all()
+
+    if request.method == 'POST':
+        unit_name = request.POST.get('unit_name')
+        incharge_id = request.POST.get('incharge')
+        remarks = request.POST.get('remarks')
+
+        incharge_user = User.objects.filter(id=incharge_id).first() if incharge_id else None
+
+        unit = Unit.objects.create(
+            station=station,
+            name=unit_name,
+            incharge=incharge_user,
+            remarks=remarks
+        )
+
+        # Check if request is AJAX
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({
+                'status': 'success',
+                'unit_id': unit.id,
+                'unit_name': unit.name
+            })
+
+        return redirect('create_unit', station_id=station.id)
+
+    # GET request - show existing units for the station
+    units = Unit.objects.filter(station=station).order_by('id')
+    context = {
+        'station': station,
+        'users': users,
+        'units': units
+    }
+    return render(request, 'create_unit.html', context)
+
+@login_required
+def create_tray(request, unit_id):
+    unit = get_object_or_404(Unit, id=unit_id)
+
+    if request.method == 'POST':
+        tray_name = request.POST.get('tray_name')
+        max_capacity = request.POST.get('max_capacity')
+        remarks = request.POST.get('remarks')
+
+        tray = Tray.objects.create(
+            unit=unit,
+            tray_name=tray_name,
+            remarks=remarks,
+            max_capacity=max_capacity if max_capacity else None
+        )
+
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({
+                'status': 'success',
+                'tray_id': tray.id,
+                'tray_name': tray.tray_name
+            })
+        return redirect('create_tray', unit_id=unit.id)
+
+    # GET request - show existing trays
+    trays = Tray.objects.filter(unit=unit).order_by('id')
+    context = {
+        'unit': unit,
+        'trays': trays
+    }
+    return render(request, 'create_tray.html', context)
+
+def assign_tools(request, tray_id):
+    tray = get_object_or_404(Tray, id=tray_id)
+    search_query = request.GET.get('search', '')
+
+    # Join Inventory with ToolCreation
+    inventory_items = Inventory.objects.select_related('tool').all()
+
+    # Apply search filter
+    if search_query:
+        inventory_items = inventory_items.filter(
+            Q(tool__tool_name__icontains=search_query) |
+            Q(tool__tool_id__icontains=search_query) |
+            Q(tool__part_number__icontains=search_query) |
+            Q(tool__brand__icontains=search_query) |
+            Q(tool__tool_type__icontains=search_query)
+        )
+
+    if request.method == 'POST':
+        for key, value in request.POST.items():
+            if not key.startswith('assign_qty_'):
+                continue
+
+            # Extract string-based inventory_id (e.g., "INV001")
+            inventory_id = key.replace('assign_qty_', '').strip()
+            if not inventory_id:
+                continue
+
+            try:
+                assign_qty = int(value) if value.strip() else 0
+            except ValueError:
+                assign_qty = 0
+
+            if assign_qty <= 0:
+                continue
+
+            remarks = request.POST.get(f'remarks_{inventory_id}', '').strip()
+            inventory_item = get_object_or_404(Inventory, inventory_id=inventory_id)
+            tool = inventory_item.tool
+
+            # Validate stock
+            if assign_qty > inventory_item.in_stock:
+                messages.error(
+                    request,
+                    f"Cannot assign {assign_qty} units of {tool.tool_name}. "
+                    f"Only {inventory_item.in_stock} available."
+                )
+                continue  # Skip instead of full redirect
+
+            # Deduct stock
+            inventory_item.in_stock -= assign_qty
+            inventory_item.assigned_quantity += assign_qty
+            inventory_item.available_quantity = inventory_item.assigned_quantity
+            inventory_item.save()
+
+            # Create TrayTool record
+            TrayTool.objects.create(
+                tray=tray,
+                inventory=inventory_item,
+                assigned_quantity=assign_qty,
+                remarks=remarks,
+                assigned_by=request.user if request.user.is_authenticated else None
+            )
+
+        messages.success(request, "Tools assigned successfully!")
+        return redirect('assign_tools', tray_id=tray.id)
+
+    context = {
+        'tray': tray,
+        'inventory_items': inventory_items,
+        'search_query': search_query,
+    }
+    return render(request, 'assign_tools.html', context)
+
+def assigned_tools_list(request, tray_id):
+    assigned_tools = TrayTool.objects.select_related(
+        'tray', 'tray__unit', 'tray__unit__station',
+        'inventory', 'inventory__tool', 'assigned_by'
+    ).filter(tray_id=tray_id)
+
+    context = {
+        'assigned_tools': assigned_tools,
+        'tray_id': tray_id,
+    }
+
+    # Use render to display the template with context
+    return render(request, 'assigned_tools_list.html', context)
+
+# views.py
+from django.db.models import Q
+from .models import TrayTool, ServiceStation, Unit, Tray, Inventory
+
+def global_assigned_tools(request):
+    # Get filter parameters
+    station_id = request.GET.get('station_id', '')
+    unit_id = request.GET.get('unit_id', '')
+    tray_id = request.GET.get('tray_id', '')
+    tool_id = request.GET.get('tool_id', '')
+    tool_name = request.GET.get('tool_name', '')
+
+    tray_tools = TrayTool.objects.select_related(
+        'tray',
+        'tray__unit',
+        'tray__unit__station',
+        'inventory',
+        'inventory__tool',
+        'assigned_by'
+    ).all()
+
+    # Apply main filters
+    if station_id:
+        tray_tools = tray_tools.filter(tray__unit__station__id=station_id)
+    if unit_id:
+        tray_tools = tray_tools.filter(tray__unit__id=unit_id)
+    if tray_id:
+        tray_tools = tray_tools.filter(tray__id=tray_id)
+    if tool_id:
+        tray_tools = tray_tools.filter(inventory__tool__tool_id__icontains=tool_id)
+    if tool_name:
+        tray_tools = tray_tools.filter(inventory__tool__tool_name__icontains=tool_name)
+
+    # Populate filter dropdowns based on selected station/unit
+    stations = ServiceStation.objects.all()
+    units = Unit.objects.filter(station__id=station_id) if station_id else Unit.objects.all()
+    trays = Tray.objects.filter(unit__id=unit_id) if unit_id else Tray.objects.filter(unit__station__id=station_id) if station_id else Tray.objects.all()
+    tools = Inventory.objects.filter(inventory_id__in=tray_tools.values_list('inventory__inventory_id', flat=True))
+
+    context = {
+        'tray_tools': tray_tools,
+        'stations': stations,
+        'units': units,
+        'trays': trays,
+        'tools': tools,
+        'filters': {
+            'station_id': station_id,
+            'unit_id': unit_id,
+            'tray_id': tray_id,
+            'tool_id': tool_id,
+            'tool_name': tool_name,
+        }
+    }
+    return render(request, 'global_assigned_tools.html', context)
