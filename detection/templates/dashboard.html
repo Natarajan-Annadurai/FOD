@@ -52,10 +52,10 @@
           </a>
 
           <!-- Tool Assignment -->
-          <a href="#" class="card bg-yellow-800 text-white rounded-2xl p-6 flex flex-col items-center">
+          <a href="#" onclick="window.location.href='{% url 'global_assigned_tools' %}'" class="card bg-yellow-800 text-white rounded-2xl p-6 flex flex-col items-center">
               <img src="https://img.icons8.com/ios-filled/100/ffffff/task.png" class="w-16 mb-3">
               <h2 class="text-lg font-semibold">Tool Assignment</h2>
-              <p class="text-sm mt-2 text-center opacity-90">Assign tools to employees or departments.</p>
+              <p class="text-sm mt-2 text-center opacity-90">Assign tools on service station, unit, trays.</p>
           </a>
 
           <!-- Inventory Management -->
@@ -66,16 +66,16 @@
           </a>
 
             <!-- Unit Management -->
-            <a href="#" class="card bg-purple-800 text-white rounded-2xl p-6 flex flex-col items-center">
+            <a href="#" onclick="window.location.href='{% url 'service_station_list' %}'" class="card bg-purple-800 text-white rounded-2xl p-6 flex flex-col items-center">
                 <img src="https://img.icons8.com/ios/100/ffffff/scale.png" class="w-16 mb-3">
-                <h2 class="text-lg font-semibold">Unit Management</h2>
+                <h2 class="text-lg font-semibold">Service Station Management</h2>
                 <p class="text-sm mt-2 text-center opacity-90">Manage Service Station</p>
             </a>
 
             <!-- Employee Management -->
             <a href="#" class="card bg-blue-800 text-white rounded-2xl p-6 flex flex-col items-center">
                 <img src="https://img.icons8.com/ios/100/ffffff/scale.png" class="w-16 mb-3">
-                <h2 class="text-lg font-semibold">Employee Management</h2>
+                <h2 class="text-lg font-semibold">User Management</h2>
                 <p class="text-sm mt-2 text-center opacity-90">Maintain employee data, roles, and departments.</p>
             </a>
         </div>
