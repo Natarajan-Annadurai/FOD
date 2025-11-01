@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Service Stations</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+
+<div class="max-w-6xl mx-auto mt-10 bg-white shadow-lg rounded-lg p-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-4 border-b pb-3">
+    <!-- Title on the left -->
+    <h1 class="text-2xl font-semibold text-gray-700">Service Stations</h1>
+
+    <!-- Buttons container aligned to the right -->
+    <div class="flex gap-2">
+      <a href="{% url 'create_service_station' %}"
+         class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+        + Add Station
+      </a>
+      <a href="{% url 'dashboard' %}"
+         class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition">
+        Back
+      </a>
+    </div>
+  </div>
+
+  <!-- Service Station Table -->
+  <table class="min-w-full border border-gray-300 text-sm">
+    <thead class="bg-gray-200 text-gray-700">
+      <tr>
+        <th class="px-4 py-2 border">S No</th>
+        <th class="px-4 py-2 border">Station Name</th>
+        <th class="px-4 py-2 border">Location</th>
+        <th class="px-4 py-2 border">Manager</th>
+        <th class="px-4 py-2 border text-center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for station in stations %}
+      <tr class="hover:bg-gray-50">
+        <td class="border px-4 py-2 text-center">{{ forloop.counter }}</td>
+        <td class="border px-4 py-2">{{ station.name }}</td>
+        <td class="border px-4 py-2">{{ station.location }}</td>
+        <td class="border px-4 py-2">{{ station.manager.username|default:"—" }}</td>
+        <td class="border px-4 py-2 text-center">
+          <a href="{% url 'create_unit' station.id %}"
+             class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
+            Add Unit
+          </a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="text-center py-4 text-gray-500">
+          No service stations available
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

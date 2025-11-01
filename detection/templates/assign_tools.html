@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Assign Tools to {{ tray.tray_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+<div class="max-w-7xl mx-auto bg-white shadow-lg rounded-lg p-6">
+
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-semibold">
+      Assign Tools to Tray: {{ tray.tray_name }}
+    </h1>
+    <div class="flex gap-3">
+      <a href="{% url 'assigned_tools_list' tray_id=tray.id %}"
+         class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+         View Assigned Tools
+      </a>
+    </div>
+  </div>
+
+  <!-- 🔍 Global Search -->
+  <form method="get" class="mb-4 flex gap-2">
+    <input type="text" name="search" value="{{ search_query }}" placeholder="Search by Tool Name, ID, Brand..."
+           class="flex-1 border px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
+    <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+      Search
+    </button>
+    <a href="{% url 'assign_tools' tray.id %}" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
+      Reset
+    </a>
+  </form>
+
+  <form method="post">
+    {% csrf_token %}
+    <table class="min-w-full border border-gray-300 text-sm">
+      <thead class="bg-gray-200 text-gray-700">
+        <tr>
+          <th class="px-3 py-2 border">Tool ID</th>
+          <th class="px-3 py-2 border">Tool Name</th>
+          <th class="px-3 py-2 border">Description</th>
+          <th class="px-3 py-2 border">Part Number</th>
+          <th class="px-3 py-2 border">Brand</th>
+          <th class="px-3 py-2 border">Tool Type</th>
+          <th class="px-3 py-2 border">Available Qty</th>
+          <th class="px-3 py-2 border">Assign Qty</th>
+          <th class="px-3 py-2 border">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in inventory_items %}
+        <tr class="hover:bg-gray-50">
+          <td class="border px-2 py-1">{{ item.tool.tool_id }}</td>
+          <td class="border px-2 py-1">{{ item.tool.tool_name }}</td>
+          <td class="border px-2 py-1">{{ item.tool.description }}</td>
+          <td class="border px-2 py-1">{{ item.tool.part_number }}</td>
+          <td class="border px-2 py-1">{{ item.tool.brand }}</td>
+          <td class="border px-2 py-1">{{ item.tool.tool_type }}</td>
+          <td class="border px-2 py-1 text-center">{{ item.in_stock }}</td>
+          <td class="border px-2 py-1">
+            <input type="number" name="assign_qty_{{ item.inventory_id }}" min="0"
+                   max="{{ item.in_stock }}" value="0" placeholder="0"
+                   class="w-20 border px-1 py-1 rounded">
+          </td>
+          <td class="border px-2 py-1">
+            <input type="text" name="remarks_{{ item.inventory_id }}" class="border px-1 py-1 rounded">
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center py-4 text-gray-500">No tools found</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <button type="submit" class="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+      Assign Tools
+    </button>
+    <a href="{% url 'service_station_list' %}"
+         class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">
+        Service Station
+    </a>
+
+    <a href="{% url 'create_tray' unit_id=tray.unit.id %}"
+       class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+        Back
+    </a>
+
+  </form>
+</div>
+</body>
+</html>

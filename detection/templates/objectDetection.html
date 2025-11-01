@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Object Detection — Base Interactive</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    /* small extras (not Tailwind) */
+    .sidebar { min-width: 250px; }
+    .canvas-wrap { position: relative; display: inline-block; }
+    #previewCanvas { position: absolute; left: 0; top: 0; }
+    .box-label { font-weight: 700; font-size: 12px; padding: 2px 6px; border-radius: 4px; }
+    /* simple loading spinner */
+    .spinner { border: 4px solid rgba(0,0,0,0.08); border-top-color: rgba(0,0,0,0.6); border-radius: 50%; width: 28px; height: 28px; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="min-h-screen flex">
+    <!-- Sidebar -->
+    <aside class="sidebar bg-white border-r p-4 hidden md:block">
+      <h1 class="text-xl font-bold mb-4">OD Project</h1>
+      <nav class="space-y-2 text-sm">
+        <a class="block py-2 px-3 rounded hover:bg-gray-100" href="#">Dashboard</a>
+        <a class="block py-2 px-3 rounded hover:bg-gray-100" href="#">Run Detection</a>
+        <a class="block py-2 px-3 rounded hover:bg-gray-100" href="#">Dataset</a>
+        <a class="block py-2 px-3 rounded hover:bg-gray-100" href="#">Models</a>
+        <a class="block py-2 px-3 rounded hover:bg-gray-100" href="#">Settings</a>
+      </nav>
+      <div class="mt-6 text-xs text-gray-500">Version: 0.1 • Local</div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 p-6">
+      <header class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-2xl font-semibold">Interactive Object Detection</h2>
+          <p class="text-sm text-gray-600">Upload images or stream video to run detection and visualize results.</p>
+        </div>
+        <div class="flex items-center space-x-3">
+          <label class="bg-white border rounded px-3 py-2 cursor-pointer hover:shadow">Upload image
+            <input id="fileInput" type="file" accept="image/*,video/*" class="hidden">
+          </label>
+          <button id="startCamera" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Start Camera</button>
+          <button id="runBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Run Detection</button>
+        </div>
+      </header>
+
+      <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Preview area -->
+        <div class="lg:col-span-2 bg-white p-4 rounded shadow">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm text-gray-600">Preview</div>
+            <div class="text-sm text-gray-500">Drag & drop image anywhere on this area</div>
+          </div>
+
+          <div id="dropZone" class="border-2 border-dashed border-gray-200 rounded p-3 text-center">
+            <div class="canvas-wrap">
+              <img id="previewImage" alt="preview" style="max-width:100%; display:block;" />
+              <canvas id="previewCanvas"></canvas>
+            </div>
+            <video id="previewVideo" autoplay playsinline style="max-width:100%; display:none;"></video>
+          </div>
+
+          <div class="mt-4 flex items-center space-x-3">
+            <div id="status" class="text-sm text-gray-600">Idle</div>
+            <div id="loader" class="ml-2" style="display:none;"><div class="spinner"></div></div>
+            <div class="ml-auto text-sm text-gray-500">Detections: <span id="detCount">0</span></div>
+          </div>
+        </div>
+
+        <!-- Controls & results -->
+        <aside class="bg-white p-4 rounded shadow">
+          <h3 class="font-medium mb-2">Controls</h3>
+          <div class="space-y-2 text-sm">
+            <div>
+              <label class="block">Confidence threshold: <span id="threshVal">0.25</span></label>
+              <input id="thresh" type="range" min="0" max="1" step="0.01" value="0.25" class="w-full">
+            </div>
+            <div>
+              <label class="block">Model</label>
+              <select id="modelSelect" class="w-full border rounded px-2 py-1">
+                <option value="yolo-v8">yolo-v8</option>
+                <option value="ssd">ssd-lite</option>
+              </select>
+            </div>
+            <div class="flex space-x-2">
+              <button id="clearBtn" class="flex-1 border rounded px-3 py-2">Clear</button>
+              <button id="downloadBtn" class="flex-1 border rounded px-3 py-2">Download</button>
+            </div>
+          </div>
+
+          <hr class="my-3">
+          <h3 class="font-medium mb-2">Results</h3>
+          <div id="results" class="text-sm max-h-64 overflow-auto space-y-2">
+            <!-- result items appear here -->
+          </div>
+        </aside>
+      </section>
+
+      <footer class="mt-6 text-xs text-gray-500">Tip: Press <code>Space</code> to toggle detection, <code>c</code> to clear.</footer>
+    </main>
+  </div>
+
+  <script>
+    // Simple interactive base - replace DETECTION_API with your backend endpoint
+    const DETECTION_API = '/api/detect'; // update this on server-side
+
+    const fileInput = document.getElementById('fileInput');
+    const previewImage = document.getElementById('previewImage');
+    const previewCanvas = document.getElementById('previewCanvas');
+    const previewVideo = document.getElementById('previewVideo');
+    const dropZone = document.getElementById('dropZone');
+    const runBtn = document.getElementById('runBtn');
+    const startCamera = document.getElementById('startCamera');
+    const statusEl = document.getElementById('status');
+    const loader = document.getElementById('loader');
+    const resultsEl = document.getElementById('results');
+    const detCount = document.getElementById('detCount');
+    const thresh = document.getElementById('thresh');
+    const threshVal = document.getElementById('threshVal');
+    const clearBtn = document.getElementById('clearBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let currentImage = null;
+    let ctx = previewCanvas.getContext && previewCanvas.getContext('2d');
+    let running = false;
+
+    function setStatus(s) { statusEl.textContent = s; }
+
+    function showLoader(on=true){ loader.style.display = on? 'inline-block' : 'none'; }
+
+    // Resize canvas to image size
+    function fitCanvasToImage(img){
+      previewCanvas.width = img.naturalWidth || img.videoWidth || img.width;
+      previewCanvas.height = img.naturalHeight || img.videoHeight || img.height;
+      previewCanvas.style.width = img.width + 'px';
+      previewCanvas.style.height = img.height + 'px';
+    }
+
+    fileInput.addEventListener('change', (e)=>{
+      const f = e.target.files[0];
+      if(!f) return;
+      if(f.type.startsWith('video/')){
+        startVideoFromFile(f);
+      } else {
+        loadImageFromFile(f);
+      }
+    });
+
+    // Drag & drop support
+    ['dragenter','dragover'].forEach(ev=> dropZone.addEventListener(ev, (e)=>{ e.preventDefault(); dropZone.classList.add('bg-gray-50'); }));
+    ['dragleave','drop'].forEach(ev=> dropZone.addEventListener(ev, (e)=>{ e.preventDefault(); dropZone.classList.remove('bg-gray-50'); }));
+    dropZone.addEventListener('drop', (e)=>{
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(!f) return;
+      if(f.type.startsWith('video/')) startVideoFromFile(f); else loadImageFromFile(f);
+    });
+
+    function loadImageFromFile(file){
+      previewVideo.style.display = 'none';
+      previewImage.style.display = 'block';
+      const url = URL.createObjectURL(file);
+      previewImage.onload = ()=>{
+        fitCanvasToImage(previewImage);
+        currentImage = previewImage;
+        clearCanvas();
+        URL.revokeObjectURL(url);
+      }
+      previewImage.src = url;
+      setStatus('Image loaded');
+    }
+
+    function startVideoFromFile(file){
+      previewImage.style.display = 'none';
+      previewVideo.style.display = 'block';
+      const url = URL.createObjectURL(file);
+      previewVideo.src = url;
+      previewVideo.onloadedmetadata = ()=>{
+        fitCanvasToImage(previewVideo);
+        currentImage = previewVideo;
+        clearCanvas();
+        previewVideo.play();
+      }
+      setStatus('Video loaded');
+    }
+
+    // Camera
+    let stream = null;
+    startCamera.addEventListener('click', async ()=>{
+      if(stream){ // stop
+        stream.getTracks().forEach(t=>t.stop());
+        stream = null;
+        previewVideo.style.display='none';
+        setStatus('Camera stopped');
+        startCamera.textContent = 'Start Camera';
+        return;
+      }
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio:false });
+        previewVideo.srcObject = stream;
+        previewVideo.style.display = 'block';
+        previewImage.style.display = 'none';
+        previewVideo.onloadedmetadata = ()=>{ fitCanvasToImage(previewVideo); currentImage = previewVideo; }
+        previewVideo.play();
+        startCamera.textContent = 'Stop Camera';
+        setStatus('Camera streaming');
+      }catch(err){ console.error(err); setStatus('Camera error'); }
+    });
+
+    // Run detection: capture current frame (image or video) and send to backend
+    runBtn.addEventListener('click', runDetection);
+    thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
+
+    async function runDetection(){
+      if(!currentImage) { setStatus('No image/video loaded'); return; }
+      setStatus('Running detection...'); showLoader(true);
+      // capture frame to blob
+      const captureCanvas = document.createElement('canvas');
+      captureCanvas.width = currentImage.naturalWidth || currentImage.videoWidth || currentImage.width;
+      captureCanvas.height = currentImage.naturalHeight || currentImage.videoHeight || currentImage.height;
+      const cctx = captureCanvas.getContext('2d');
+      cctx.drawImage(currentImage, 0, 0, captureCanvas.width, captureCanvas.height);
+      // convert to blob
+      captureCanvas.toBlob(async (blob)=>{
+        try{
+          // send to backend; backend should return JSON with detections: [{label, score, bbox:[x,y,w,h]}]
+          const fd = new FormData();
+          fd.append('file', blob, 'frame.png');
+          fd.append('model', document.getElementById('modelSelect').value);
+          fd.append('threshold', thresh.value);
+
+          const res = await fetch(DETECTION_API, { method: 'POST', body: fd });
+          if(!res.ok) throw new Error('Server error ' + res.status);
+          const data = await res.json();
+          renderDetections(data.detections || []);
+          setStatus('Done — ' + (data.detections? data.detections.length : 0) + ' detections');
+        }catch(err){ console.error(err); setStatus('Detection failed'); }
+        finally{ showLoader(false); }
+      }, 'image/png');
+    }
+
+    function clearCanvas(){
+      if(!ctx) ctx = previewCanvas.getContext('2d');
+      ctx.clearRect(0,0, previewCanvas.width, previewCanvas.height);
+      resultsEl.innerHTML = '';
+      detCount.textContent = '0';
+    }
+
+    function renderDetections(dets){
+      clearCanvas();
+      detCount.textContent = String(dets.length);
+      if(!dets.length) return;
+      // draw boxes scaled to displayed size
+      const dispW = currentImage.width || previewCanvas.clientWidth;
+      const dispH = currentImage.height || previewCanvas.clientHeight;
+      const imgW = currentImage.naturalWidth || currentImage.videoWidth || previewCanvas.width;
+      const imgH = currentImage.naturalHeight || currentImage.videoHeight || previewCanvas.height;
+      const sx = dispW / imgW;
+      const sy = dispH / imgH;
+      dets.forEach((d, i)=>{
+        const [x,y,w,h] = d.bbox; // expected in absolute pixels relative to original image
+        const rx = x * sx; const ry = y * sy; const rw = w * sx; const rh = h * sy;
+        // box
+        ctx.lineWidth = Math.max(2, Math.round(2 * (dispW/800)));
+        ctx.strokeStyle = 'red';
+        ctx.strokeRect(rx, ry, rw, rh);
+        ctx.fillStyle = 'red';
+        const label = `${d.label} ${Math.round(d.score*100)}%`;
+        const txtW = ctx.measureText(label).width + 8;
+        ctx.fillRect(rx, ry - 18, txtW, 18);
+        ctx.fillStyle = 'white';
+        ctx.fillText(label, rx + 4, ry - 4);
+
+        // add to results sidebar
+        const item = document.createElement('div');
+        item.className = 'p-2 border rounded';
+        item.innerHTML = `<div class=\"font-semibold\">${d.label} <span class=\"text-xs text-gray-500\">${(d.score*100).toFixed(1)}%</span></div>` +
+                         `<div class=\"text-xs text-gray-600\">bbox: [${x.toFixed(0)}, ${y.toFixed(0)}, ${w.toFixed(0)}, ${h.toFixed(0)}]</div>`;
+        resultsEl.appendChild(item);
+
+        // click to focus
+        item.addEventListener('click', ()=>{
+          // draw focus (thicker)
+          ctx.lineWidth = 4; ctx.strokeStyle='lime'; ctx.strokeRect(rx, ry, rw, rh);
+        });
+      });
+    }
+
+    // keyboard helpers
+    window.addEventListener('keydown', (e)=>{
+      if(e.code === 'Space'){ e.preventDefault(); runDetection(); }
+      if(e.key === 'c') clearCanvas();
+    });
+
+    clearBtn.addEventListener('click', ()=>{ previewImage.src=''; previewVideo.src=''; clearCanvas(); currentImage=null; setStatus('Cleared'); });
+
+    downloadBtn.addEventListener('click', ()=>{
+      // merge overlay with image and download
+      if(!currentImage) return;
+      const merge = document.createElement('canvas');
+      merge.width = previewCanvas.width; merge.height = previewCanvas.height;
+      const mctx = merge.getContext('2d');
+      mctx.drawImage(currentImage, 0, 0, merge.width, merge.height);
+      mctx.drawImage(previewCanvas, 0, 0, merge.width, merge.height);
+      const a = document.createElement('a');
+      a.href = merge.toDataURL('image/png'); a.download = 'detection.png'; a.click();
+    });
+
+    // initialize canvas text style
+    if(ctx){ ctx.font = '14px Arial'; ctx.textBaseline = 'top'; }
+
+    // small stub: sample detection API fallback (when DETECTION_API is unset or for offline demo)
+    // Uncomment below to enable a fake demo without server. It will draw two demo boxes.
+    /*
+    async function runDetection(){
+      setStatus('Demo: generating fake detections'); showLoader(true);
+      setTimeout(()=>{
+        const demo = { detections: [ {label:'person', score:0.86, bbox:[50,50,150,300]}, {label:'bottle', score:0.64, bbox:[300,120,60,140]} ] };
+        renderDetections(demo.detections);
+        showLoader(false); setStatus('Demo complete');
+      }, 700);
+    }
+    */
+
+  </script>
+</body>
+</html>
