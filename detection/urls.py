@@ -14,5 +14,6 @@ urlpatterns = [
     path('trays/<int:tray_id>/assign-tools/', views.assign_tools, name='assign_tools'),
     path('trays/<int:tray_id>/assigned-tools/', views.assigned_tools_list, name='assigned_tools_list'),
     path('assigned-tools/', views.global_assigned_tools, name='global_assigned_tools'),
+    path('users/manage/', views.manage_users, name='manage_users'),
     path('logout/', views.logout_view, name='logout'),
 ]

@@ -121,3 +121,19 @@ class TrayTool(models.Model):
 
     def __str__(self):
         return f"{self.tray.tray_name} → {self.inventory.tool.tool_name} ({self.assigned_quantity})"
+
+class UserProfile(models.Model):
+    ROLE_CHOICES = [
+        ('Admin', 'Admin'),
+        ('Supervisor', 'Supervisor'),
+        ('Mechanic', 'Mechanic'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    station = models.ForeignKey(ServiceStation, null=True, blank=True, on_delete=models.SET_NULL)
+    unit = models.ForeignKey(Unit, null=True, blank=True, on_delete=models.SET_NULL)
+    tray = models.ForeignKey(Tray, null=True, blank=True, on_delete=models.SET_NULL)
+
+    def __str__(self):
+        return f"{self.user.username} ({self.role})"

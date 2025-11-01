@@ -1,15 +1,11 @@
 from django.contrib.auth import authenticate, login, logout
-from django.contrib import messages
-from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import ToolCreation, ToolPurchase, Inventory
-from django.shortcuts import render, redirect, get_object_or_404
+from .models import ToolCreation, ToolPurchase, UserProfile
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
-from .models import ServiceStation, Unit, Tray, Inventory, TrayTool
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.models import User
 
 def login_view(request):
     if request.method == 'POST':
@@ -372,3 +368,83 @@ def global_assigned_tools(request):
         }
     }
     return render(request, 'global_assigned_tools.html', context)
+
+from django.contrib.auth.models import Group
+
+@login_required
+def manage_users(request):
+    users = User.objects.all().order_by('username')
+    stations = ServiceStation.objects.all()
+    units = Unit.objects.all()
+    trays = Tray.objects.all()
+
+    print("=== DEBUG: Users and Roles Before Rendering ===")  # Debug start
+
+    for user in users:
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        # Get the first Django group if exists
+        group_role = user.groups.first().name if user.groups.exists() else None
+
+        # Determine display_role with priority: UserProfile.role > Group.name
+        if profile.role:
+            # Auto-correct if profile.role != group_role
+            if group_role and profile.role.strip() != group_role.strip():
+                print(f"Fixing role for {user.username}: {profile.role} -> {group_role}")
+                profile.role = group_role.strip()
+                profile.save()
+            user.display_role = profile.role.strip()
+        elif group_role:
+            profile.role = group_role.strip()
+            profile.save()
+            user.display_role = group_role.strip()
+        else:
+            user.display_role = "Not Assigned"
+
+        # Debug: print each user info
+        print(f"User: {user.username}, Role: '{user.display_role}'")
+
+    print("=== END DEBUG ===")
+
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        role = request.POST.get('role').strip() if request.POST.get('role') else None
+        station_ids = request.POST.getlist('stations')
+        unit_ids = request.POST.getlist('units')
+        tray_ids = request.POST.getlist('trays')
+
+        user = get_object_or_404(User, id=user_id)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+
+        # Assign access rules
+        if role == "Admin":
+            profile.station = None
+            profile.unit = None
+            profile.tray = None
+        elif role == "Supervisor":
+            profile.station_ids = ",".join(station_ids) if station_ids else None
+            profile.unit = None
+            profile.tray = None
+        elif role == "Mechanic":
+            profile.station_id = station_ids[0] if station_ids else None
+            profile.unit_ids = ",".join(unit_ids) if unit_ids else None
+            profile.tray_id = tray_ids[0] if tray_ids else None
+
+        profile.save()
+
+        # Sync Django group for this user
+        user.groups.clear()
+        group, _ = Group.objects.get_or_create(name=role)
+        user.groups.add(group)
+        user.save()
+
+        print(f"=== DEBUG POST: Updated User {user.username} with role {role} ===")  # Debug POST
+        return redirect('manage_users')
+
+    return render(request, 'manage_users.html', {
+        'users': users,
+        'stations': stations,
+        'units': units,
+        'trays': trays,
+    })
