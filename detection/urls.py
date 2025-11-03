@@ -15,5 +15,8 @@ urlpatterns = [
     path('trays/<int:tray_id>/assigned-tools/', views.assigned_tools_list, name='assigned_tools_list'),
     path('assigned-tools/', views.global_assigned_tools, name='global_assigned_tools'),
     path('users/manage/', views.manage_users, name='manage_users'),
+    path('users/assigned/', views.user_assigned_list, name='user_assigned_list'),
+    path('api/detections/', views.receive_detections, name='receive_detections'),
+    path('tools-tracking/', views.tools_tracking_list, name='tools_tracking_list'),
     path('logout/', views.logout_view, name='logout'),
 ]

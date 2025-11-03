@@ -130,10 +130,23 @@ class UserProfile(models.Model):
     ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
-    station = models.ForeignKey(ServiceStation, null=True, blank=True, on_delete=models.SET_NULL)
-    unit = models.ForeignKey(Unit, null=True, blank=True, on_delete=models.SET_NULL)
-    tray = models.ForeignKey(Tray, null=True, blank=True, on_delete=models.SET_NULL)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, null=True, blank=True)
+
+    # Only store readable names
+    stations_display = models.CharField(max_length=255, null=True, blank=True)
+    units_display = models.CharField(max_length=255, null=True, blank=True)
+    trays_display = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.user.username} ({self.role})"
+        return f"{self.user.username} - {self.role}"
+
+class ToolsTracking(models.Model):
+    device_id = models.CharField(max_length=100)
+    tool_name = models.CharField(max_length=100)
+    confidence = models.FloatField()
+    timestamp = models.DateTimeField()
+    frame_id = models.CharField(max_length=100, blank=True, null=True)
+    meta = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"{self.device_id} - {self.tool_name} ({self.confidence:.2f})"

@@ -4,18 +4,27 @@
   <meta charset="UTF-8">
   <title>Manage Users</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 p-6">
 
 <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow-lg">
   <div class="flex items-center justify-between mb-4 border-b pb-2">
-    <h2 class="text-2xl font-semibold mb-4">Manage Users & Roles</h2>
-      <button type="button"
-              id="backBtn"
-              class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
-              onclick="window.location.href='{% url 'dashboard' %}'">
-        Dashboard
-      </button>
+      <h2 class="text-2xl font-semibold mb-4">Manage Users & Roles</h2>
+
+      <div class="flex space-x-2">
+          <button type="button"
+                  class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                  onclick="window.location.href='{% url 'user_assigned_list' %}'">
+              Assigned Users
+          </button>
+          <button type="button"
+                  id="backBtn"
+                  class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+                  onclick="window.location.href='{% url 'dashboard' %}'">
+              Dashboard
+          </button>
+      </div>
   </div>
 
   <table class="min-w-full border border-gray-300 rounded-lg text-sm">
@@ -44,7 +53,10 @@
             class="assign-btn bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
             data-user-id="{{ user.id }}"
             data-username="{{ user.username }}"
-            data-role="{{ user.display_role }}">
+            data-role="{{ user.display_role }}"
+            data-stations="{{ user.userprofile.stations_display|default_if_none:'' }}"
+            data-units="{{ user.userprofile.units_display|default_if_none:'' }}"
+            data-trays="{{ user.userprofile.trays_display|default_if_none:'' }}">
             Assign
           </button>
         </td>
@@ -213,27 +225,79 @@
   const stationContainer = document.getElementById("stationContainer");
 
   function populateUnits(selectedStationIds) {
+    // Keep all existing units
+    const allExistingUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                                  .map(cb => cb.value);
+    const checkedUnitIds = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                                .filter(cb => cb.checked)
+                                .map(cb => cb.value);
+
+    // Determine which units to keep: only units whose station is still selected
+    const unitsToKeep = allUnits
+                        .filter(u => allExistingUnits.includes(String(u.id)) && selectedStationIds.includes(String(u.station_id)))
+                        .map(u => u.id);
+
+    // Clear unit container
     unitContainer.innerHTML = "";
-    const filteredUnits = allUnits.filter(u => selectedStationIds.includes(String(u.station_id)));
-    filteredUnits.forEach(u => {
-      const label = document.createElement("label");
-      label.className = "inline-flex items-center mb-1";
-      label.innerHTML = `<input type="checkbox" name="units" value="${u.id}" class="unit-checkbox mr-2"> ${u.name}`;
-      unitContainer.appendChild(label);
+
+    // Add units to keep
+    unitsToKeep.forEach(uId => {
+        const u = allUnits.find(unit => String(unit.id) === String(uId));
+        const label = document.createElement("label");
+        label.className = "inline-flex items-center mb-1";
+        label.innerHTML = `<input type="checkbox" name="units" value="${u.id}" class="unit-checkbox mr-2"> ${u.name}`;
+        unitContainer.appendChild(label);
     });
-    trayContainer.innerHTML = ""; // clear trays
-  }
+
+    // Add units from newly selected stations
+    selectedStationIds.forEach(stationId => {
+        const unitsForStation = allUnits.filter(u => String(u.station_id) === String(stationId));
+        unitsForStation.forEach(u => {
+            if (!unitsToKeep.includes(u.id)) {
+                const label = document.createElement("label");
+                label.className = "inline-flex items-center mb-1";
+                label.innerHTML = `<input type="checkbox" name="units" value="${u.id}" class="unit-checkbox mr-2"> ${u.name}`;
+                unitContainer.appendChild(label);
+            }
+        });
+    });
+
+    // Restore checked state
+    unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+        if (checkedUnitIds.includes(cb.value)) cb.checked = true;
+    });
+
+    // Update trays based on currently checked units
+    const selectedUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                               .filter(cb => cb.checked)
+                               .map(cb => cb.value);
+    populateTrays(selectedUnits);
+}
 
   function populateTrays(selectedUnitIds) {
-    trayContainer.innerHTML = "";
-    const filteredTrays = allTrays.filter(t => selectedUnitIds.includes(String(t.unit_id)));
+  // Keep currently checked tray IDs
+  const checkedTrayIds = Array.from(trayContainer.querySelectorAll(".tray-checkbox"))
+                              .filter(cb => cb.checked)
+                              .map(cb => cb.value);
+
+  selectedUnitIds.forEach(unitId => {
+    const filteredTrays = allTrays.filter(t => String(t.unit_id) === String(unitId));
     filteredTrays.forEach(t => {
-      const label = document.createElement("label");
-      label.className = "inline-flex items-center mb-1";
-      label.innerHTML = `<input type="radio" name="trays" value="${t.id}" class="tray-radio mr-2"> ${t.name}`;
-      trayContainer.appendChild(label);
+      if (!trayContainer.querySelector(`.tray-checkbox[value="${t.id}"]`)) {
+        const label = document.createElement("label");
+        label.className = "inline-flex items-center mb-1";
+        label.innerHTML = `<input type="checkbox" name="trays" value="${t.id}" class="tray-checkbox mr-2"> ${t.name}`;
+        trayContainer.appendChild(label);
+      }
     });
-  }
+  });
+
+  // Restore checked state
+  trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+    cb.checked = checkedTrayIds.includes(cb.value);
+  });
+}
+
 
   // Station change
   stationContainer.addEventListener("change", (e) => {
@@ -254,6 +318,11 @@
   });
 
   function populateTrays(selectedUnitIds) {
+  // Save currently checked tray IDs
+  const checkedTrays = Array.from(trayContainer.querySelectorAll(".tray-checkbox"))
+                            .filter(cb => cb.checked)
+                            .map(cb => cb.value);
+
   trayContainer.innerHTML = "";
   const filteredTrays = allTrays.filter(t => selectedUnitIds.includes(String(t.unit_id)));
   filteredTrays.forEach(t => {
@@ -261,8 +330,99 @@
     label.className = "inline-flex items-center mb-1";
     label.innerHTML = `<input type="checkbox" name="trays" value="${t.id}" class="tray-checkbox mr-2"> ${t.name}`;
     trayContainer.appendChild(label);
+
+    // Restore previously checked trays
+    const input = label.querySelector("input");
+    if (checkedTrays.includes(String(t.id))) {
+      input.checked = true;
+    }
   });
 }
+
+document.querySelectorAll(".assign-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const userId = btn.dataset.userId;
+    const role = btn.dataset.role;
+
+    document.getElementById("modalUsername").textContent = btn.dataset.username;
+    document.getElementById("modalUserId").value = userId;
+    roleHidden.value = role;
+
+    // Reset UI
+    stationDiv.classList.add("hidden");
+    unitDiv.classList.add("hidden");
+    trayDiv.classList.add("hidden");
+    adminMsg.classList.add("hidden");
+    infoText.classList.add("hidden");
+    unitContainer.innerHTML = "";
+    trayContainer.innerHTML = "";
+
+    // Parse user's current selections
+    const userStations = btn.dataset.stations ? btn.dataset.stations.split(",").map(s => s.trim()) : [];
+    const userUnits = btn.dataset.units ? btn.dataset.units.split(",").map(u => u.trim()) : [];
+    const userTrays = btn.dataset.trays ? btn.dataset.trays.split(",").map(t => t.trim()) : [];
+
+    if (role === "Admin") {
+        adminMsg.classList.remove("hidden");
+        stationDiv.classList.remove("hidden");
+        document.querySelectorAll(".station-checkbox").forEach(cb => {
+            cb.checked = true;
+            cb.disabled = true;
+        });
+
+        populateUnits(Array.from(document.querySelectorAll(".station-checkbox")).map(cb => cb.value));
+        unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+            cb.checked = true;
+            cb.disabled = true;
+        });
+
+        populateTrays(Array.from(unitContainer.querySelectorAll(".unit-checkbox")).map(cb => cb.value));
+        trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+            cb.checked = true;
+            cb.disabled = true;
+        });
+    } else {
+        if (role === "Supervisor") {
+            stationDiv.classList.remove("hidden");
+            infoText.textContent = "Supervisor has access to all units and trays under selected stations.";
+            infoText.classList.remove("hidden");
+        } else if (role === "Mechanic") {
+            stationDiv.classList.remove("hidden");
+            unitDiv.classList.remove("hidden");
+            trayDiv.classList.remove("hidden");
+            infoText.textContent = "Mechanic can access only assigned station, unit, and tray.";
+            infoText.classList.remove("hidden");
+        }
+
+        // Mark selected stations
+        document.querySelectorAll(".station-checkbox").forEach(cb => {
+            cb.checked = userStations.includes(cb.nextSibling.textContent.trim());
+        });
+
+        // Populate and mark selected units
+        populateUnits(
+            Array.from(document.querySelectorAll(".station-checkbox"))
+                 .filter(cb => cb.checked)
+                 .map(cb => cb.value)
+        );
+        unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+            cb.checked = userUnits.includes(cb.nextSibling.textContent.trim());
+        });
+
+        // Populate and mark selected trays
+        populateTrays(
+            Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                 .filter(cb => cb.checked)
+                 .map(cb => cb.value)
+        );
+        trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+            cb.checked = userTrays.includes(cb.nextSibling.textContent.trim());
+        });
+    }
+
+    modal.classList.remove("hidden");
+  });
+});
 </script>
 </body>
 </html>

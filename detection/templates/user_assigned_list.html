@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Assigned User Access</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+
+<div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+  <div class="flex items-center justify-between mb-4 border-b pb-2">
+    <h2 class="text-2xl font-semibold">Assigned Access Details</h2>
+    <button type="button"
+            class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+            onclick="window.location.href='{% url 'manage_users' %}'">
+      Back
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+    <input type="text" id="filterUsername" placeholder="Username" class="border p-2 rounded">
+    <input type="text" id="filterRole" placeholder="Role" class="border p-2 rounded">
+    <input type="text" id="filterStation" placeholder="Station" class="border p-2 rounded">
+    <input type="text" id="filterUnit" placeholder="Unit" class="border p-2 rounded">
+    <input type="text" id="filterTray" placeholder="Tray" class="border p-2 rounded">
+  </div>
+
+  <table id="userTable" class="min-w-full border border-gray-300 rounded-lg text-sm">
+    <thead class="bg-gray-50 text-gray-700">
+      <tr>
+        <th class="py-2 px-4">Username</th>
+        <th class="py-2 px-4">Role</th>
+        <th class="py-2 px-4">Assigned Stations</th>
+        <th class="py-2 px-4">Assigned Units</th>
+        <th class="py-2 px-4">Assigned Trays</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr class="border-t hover:bg-gray-50">
+        <td class="py-2 px-4 username">{{ user.username }}</td>
+        <td class="py-2 px-4 role">{{ user.role|default:"Not Assigned" }}</td>
+        <td class="py-2 px-4 station">{{ user.stations_display|default:"None" }}</td>
+        <td class="py-2 px-4 unit">{{ user.units_display|default:"None" }}</td>
+        <td class="py-2 px-4 tray">{{ user.trays_display|default:"None" }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="text-center py-4 text-gray-500">No users found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // Multiple filter function
+  const filters = ['Username', 'Role', 'Station', 'Unit', 'Tray'];
+
+  filters.forEach(f => {
+    document.getElementById(`filter${f}`).addEventListener('input', filterTable);
+  });
+
+  function filterTable() {
+    const usernameFilter = document.getElementById('filterUsername').value.toLowerCase();
+    const roleFilter = document.getElementById('filterRole').value.toLowerCase();
+    const stationFilter = document.getElementById('filterStation').value.toLowerCase();
+    const unitFilter = document.getElementById('filterUnit').value.toLowerCase();
+    const trayFilter = document.getElementById('filterTray').value.toLowerCase();
+
+    const rows = document.querySelectorAll('#userTable tbody tr');
+    rows.forEach(row => {
+      const username = row.querySelector('.username').textContent.toLowerCase();
+      const role = row.querySelector('.role').textContent.toLowerCase();
+      const station = row.querySelector('.station').textContent.toLowerCase();
+      const unit = row.querySelector('.unit').textContent.toLowerCase();
+      const tray = row.querySelector('.tray').textContent.toLowerCase();
+
+      if (
+        username.includes(usernameFilter) &&
+        role.includes(roleFilter) &&
+        station.includes(stationFilter) &&
+        unit.includes(unitFilter) &&
+        tray.includes(trayFilter)
+      ) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
