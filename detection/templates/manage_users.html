@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Manage Users</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+
+<div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+  <div class="flex items-center justify-between mb-4 border-b pb-2">
+      <h2 class="text-2xl font-semibold mb-4">Manage Users & Roles</h2>
+
+      <div class="flex space-x-2">
+          <button type="button"
+                  class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                  onclick="window.location.href='{% url 'user_assigned_list' %}'">
+              Assigned Users
+          </button>
+          <button type="button"
+                  id="backBtn"
+                  class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+                  onclick="window.location.href='{% url 'dashboard' %}'">
+              Dashboard
+          </button>
+      </div>
+  </div>
+
+  <table class="min-w-full border border-gray-300 rounded-lg text-sm">
+    <thead class="bg-gray-50 text-gray-700">
+      <tr>
+        <th class="py-2 px-4">Username</th>
+        <th class="py-2 px-4">Email</th>
+        <th class="py-2 px-4">Role</th>
+        <th class="py-2 px-4 text-center">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr class="border-t">
+        <td class="py-2 px-4">{{ user.username }}</td>
+        <td class="py-2 px-4">{{ user.email }}</td>
+        <td class="py-2 px-4">
+          {% if user.userprofile %}
+            {{ user.display_role }}
+          {% else %}
+            <span class="text-gray-400">Not Assigned</span>
+          {% endif %}
+        </td>
+        <td class="py-2 px-4 text-center">
+          <button
+            class="assign-btn bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+            data-user-id="{{ user.id }}"
+            data-username="{{ user.username }}"
+            data-role="{{ user.display_role }}"
+            data-stations="{{ user.userprofile.stations_display|default_if_none:'' }}"
+            data-units="{{ user.userprofile.units_display|default_if_none:'' }}"
+            data-trays="{{ user.userprofile.trays_display|default_if_none:'' }}">
+            Assign
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal -->
+<div id="assignModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+  <div class="bg-white p-6 rounded-lg w-1/3 shadow-lg max-h-[90vh] overflow-y-auto">
+    <h3 class="text-lg font-semibold mb-4">
+      Assign Access for <span id="modalUsername" class="text-blue-600"></span>
+    </h3>
+
+    <form method="POST">
+      {% csrf_token %}
+      <input type="hidden" name="user_id" id="modalUserId">
+      <input type="hidden" name="role" id="hiddenRole">
+
+      <!-- Info Message -->
+      <div id="adminMsg" class="hidden bg-green-50 border border-green-300 text-green-700 p-2 rounded mb-3 text-sm">
+        Super access for all service stations.
+      </div>
+
+      <!-- Station checkboxes -->
+      <div id="stationDiv" class="hidden mb-3">
+        <label class="block text-sm font-medium mb-1">Service Station:</label>
+        <div id="stationContainer" class="flex flex-col max-h-40 overflow-y-auto border p-2 rounded">
+          {% for s in stations %}
+          <label class="inline-flex items-center mb-1">
+            <input type="checkbox" name="stations" value="{{ s.id }}" class="station-checkbox mr-2">
+            {{ s.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Unit checkboxes -->
+      <div id="unitDiv" class="hidden mb-3">
+        <label class="block text-sm font-medium mb-1">Units:</label>
+        <div id="unitContainer" class="flex flex-col max-h-40 overflow-y-auto border p-2 rounded"></div>
+      </div>
+
+      <!-- Tray radio buttons -->
+     <div id="trayDiv" class="hidden mb-3">
+        <label class="block text-sm font-medium mb-1">Tray:</label>
+        <div id="trayContainer" class="flex flex-col max-h-40 overflow-y-auto border p-2 rounded">
+          {% for t in trays %}
+          <label class="inline-flex items-center mb-1">
+            <input type="checkbox" name="trays" value="{{ t.id }}" class="tray-checkbox mr-2">
+            {{ t.tray_name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <p id="infoText" class="text-sm text-gray-600 hidden mb-3"></p>
+
+      <!-- Buttons -->
+      <div class="flex justify-end space-x-2 mt-4">
+        <button type="button" id="cancelModal" class="bg-gray-300 px-4 py-1 rounded hover:bg-gray-400">Cancel</button>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // JSON data from Django
+  const allUnits = [
+    {% for u in units %}
+    { id: {{ u.id }}, name: "{{ u.name }}", station_id: {{ u.station.id }} }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  const allTrays = [
+    {% for t in trays %}
+    { id: {{ t.id }}, name: "{{ t.tray_name }}", unit_id: {{ t.unit.id }} }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  const modal = document.getElementById("assignModal");
+  const roleHidden = document.getElementById("hiddenRole");
+  const stationDiv = document.getElementById("stationDiv");
+  const unitDiv = document.getElementById("unitDiv");
+  const trayDiv = document.getElementById("trayDiv");
+  const adminMsg = document.getElementById("adminMsg");
+  const infoText = document.getElementById("infoText");
+  const unitContainer = document.getElementById("unitContainer");
+  const trayContainer = document.getElementById("trayContainer");
+
+  // Open modal
+  document.querySelectorAll(".assign-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const role = btn.dataset.role;
+      document.getElementById("modalUsername").textContent = btn.dataset.username;
+      document.getElementById("modalUserId").value = btn.dataset.userId;
+      roleHidden.value = role;
+
+      // Reset UI
+      stationDiv.classList.add("hidden");
+      unitDiv.classList.add("hidden");
+      trayDiv.classList.add("hidden");
+      adminMsg.classList.add("hidden");
+      infoText.classList.add("hidden");
+      unitContainer.innerHTML = "";
+      trayContainer.innerHTML = "";
+
+     if (role === "Admin") {
+          adminMsg.classList.remove("hidden");
+
+          // Show station div
+          stationDiv.classList.remove("hidden");
+
+          // Check all stations and disable checkboxes
+          document.querySelectorAll(".station-checkbox").forEach(cb => {
+              cb.checked = true;
+              cb.disabled = true; // prevent unchecking
+          });
+
+          // Populate all units
+          const allStationIds = Array.from(document.querySelectorAll(".station-checkbox")).map(cb => cb.value);
+          populateUnits(allStationIds);
+
+          // Disable all unit checkboxes for admin
+          unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+              cb.checked = true;
+              cb.disabled = true;
+          });
+
+          // Populate all trays
+          const allUnitIds = Array.from(unitContainer.querySelectorAll(".unit-checkbox")).map(cb => cb.value);
+          populateTrays(allUnitIds);
+
+          // Disable all tray checkboxes for admin
+          trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+              cb.checked = true;
+              cb.disabled = true;
+          });
+      } else if (role === "Supervisor") {
+          stationDiv.classList.remove("hidden");
+          infoText.textContent = "Supervisor has access to all units and trays under selected stations.";
+          infoText.classList.remove("hidden");
+      } else if (role === "Mechanic") {
+          stationDiv.classList.remove("hidden");
+          unitDiv.classList.remove("hidden");
+          trayDiv.classList.remove("hidden");
+          infoText.textContent = "Mechanic can access only assigned station, unit, and tray.";
+          infoText.classList.remove("hidden");
+      } else {
+          infoText.textContent = "No role assigned yet. Please assign one first.";
+          infoText.classList.remove("hidden");
+      }
+
+      modal.classList.remove("hidden");
+    });
+  });
+
+  // Cancel modal
+  document.getElementById("cancelModal").addEventListener("click", () => {
+    modal.classList.add("hidden");
+  });
+
+  // Cascading logic for Mechanics
+  const stationContainer = document.getElementById("stationContainer");
+
+  function populateUnits(selectedStationIds) {
+    // Keep all existing units
+    const allExistingUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                                  .map(cb => cb.value);
+    const checkedUnitIds = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                                .filter(cb => cb.checked)
+                                .map(cb => cb.value);
+
+    // Determine which units to keep: only units whose station is still selected
+    const unitsToKeep = allUnits
+                        .filter(u => allExistingUnits.includes(String(u.id)) && selectedStationIds.includes(String(u.station_id)))
+                        .map(u => u.id);
+
+    // Clear unit container
+    unitContainer.innerHTML = "";
+
+    // Add units to keep
+    unitsToKeep.forEach(uId => {
+        const u = allUnits.find(unit => String(unit.id) === String(uId));
+        const label = document.createElement("label");
+        label.className = "inline-flex items-center mb-1";
+        label.innerHTML = `<input type="checkbox" name="units" value="${u.id}" class="unit-checkbox mr-2"> ${u.name}`;
+        unitContainer.appendChild(label);
+    });
+
+    // Add units from newly selected stations
+    selectedStationIds.forEach(stationId => {
+        const unitsForStation = allUnits.filter(u => String(u.station_id) === String(stationId));
+        unitsForStation.forEach(u => {
+            if (!unitsToKeep.includes(u.id)) {
+                const label = document.createElement("label");
+                label.className = "inline-flex items-center mb-1";
+                label.innerHTML = `<input type="checkbox" name="units" value="${u.id}" class="unit-checkbox mr-2"> ${u.name}`;
+                unitContainer.appendChild(label);
+            }
+        });
+    });
+
+    // Restore checked state
+    unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+        if (checkedUnitIds.includes(cb.value)) cb.checked = true;
+    });
+
+    // Update trays based on currently checked units
+    const selectedUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                               .filter(cb => cb.checked)
+                               .map(cb => cb.value);
+    populateTrays(selectedUnits);
+}
+
+  function populateTrays(selectedUnitIds) {
+  // Keep currently checked tray IDs
+  const checkedTrayIds = Array.from(trayContainer.querySelectorAll(".tray-checkbox"))
+                              .filter(cb => cb.checked)
+                              .map(cb => cb.value);
+
+  selectedUnitIds.forEach(unitId => {
+    const filteredTrays = allTrays.filter(t => String(t.unit_id) === String(unitId));
+    filteredTrays.forEach(t => {
+      if (!trayContainer.querySelector(`.tray-checkbox[value="${t.id}"]`)) {
+        const label = document.createElement("label");
+        label.className = "inline-flex items-center mb-1";
+        label.innerHTML = `<input type="checkbox" name="trays" value="${t.id}" class="tray-checkbox mr-2"> ${t.name}`;
+        trayContainer.appendChild(label);
+      }
+    });
+  });
+
+  // Restore checked state
+  trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+    cb.checked = checkedTrayIds.includes(cb.value);
+  });
+}
+
+
+  // Station change
+  stationContainer.addEventListener("change", (e) => {
+    const selectedStations = Array.from(document.querySelectorAll(".station-checkbox"))
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+    populateUnits(selectedStations);
+  });
+
+  // Unit change (event delegation)
+  unitContainer.addEventListener("change", (e) => {
+    if (e.target.classList.contains("unit-checkbox")) {
+      const selectedUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+      populateTrays(selectedUnits);
+    }
+  });
+
+  function populateTrays(selectedUnitIds) {
+  // Save currently checked tray IDs
+  const checkedTrays = Array.from(trayContainer.querySelectorAll(".tray-checkbox"))
+                            .filter(cb => cb.checked)
+                            .map(cb => cb.value);
+
+  trayContainer.innerHTML = "";
+  const filteredTrays = allTrays.filter(t => selectedUnitIds.includes(String(t.unit_id)));
+  filteredTrays.forEach(t => {
+    const label = document.createElement("label");
+    label.className = "inline-flex items-center mb-1";
+    label.innerHTML = `<input type="checkbox" name="trays" value="${t.id}" class="tray-checkbox mr-2"> ${t.name}`;
+    trayContainer.appendChild(label);
+
+    // Restore previously checked trays
+    const input = label.querySelector("input");
+    if (checkedTrays.includes(String(t.id))) {
+      input.checked = true;
+    }
+  });
+}
+
+document.querySelectorAll(".assign-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const userId = btn.dataset.userId;
+    const role = btn.dataset.role;
+
+    document.getElementById("modalUsername").textContent = btn.dataset.username;
+    document.getElementById("modalUserId").value = userId;
+    roleHidden.value = role;
+
+    // Reset UI
+    stationDiv.classList.add("hidden");
+    unitDiv.classList.add("hidden");
+    trayDiv.classList.add("hidden");
+    adminMsg.classList.add("hidden");
+    infoText.classList.add("hidden");
+    unitContainer.innerHTML = "";
+    trayContainer.innerHTML = "";
+
+    // Parse user's current selections
+    const userStations = btn.dataset.stations ? btn.dataset.stations.split(",").map(s => s.trim()) : [];
+    const userUnits = btn.dataset.units ? btn.dataset.units.split(",").map(u => u.trim()) : [];
+    const userTrays = btn.dataset.trays ? btn.dataset.trays.split(",").map(t => t.trim()) : [];
+
+    if (role === "Admin") {
+        adminMsg.classList.remove("hidden");
+        stationDiv.classList.remove("hidden");
+        document.querySelectorAll(".station-checkbox").forEach(cb => {
+            cb.checked = true;
+            cb.disabled = true;
+        });
+
+        populateUnits(Array.from(document.querySelectorAll(".station-checkbox")).map(cb => cb.value));
+        unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+            cb.checked = true;
+            cb.disabled = true;
+        });
+
+        populateTrays(Array.from(unitContainer.querySelectorAll(".unit-checkbox")).map(cb => cb.value));
+        trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+            cb.checked = true;
+            cb.disabled = true;
+        });
+    } else {
+        if (role === "Supervisor") {
+            stationDiv.classList.remove("hidden");
+            infoText.textContent = "Supervisor has access to all units and trays under selected stations.";
+            infoText.classList.remove("hidden");
+        } else if (role === "Mechanic") {
+            stationDiv.classList.remove("hidden");
+            unitDiv.classList.remove("hidden");
+            trayDiv.classList.remove("hidden");
+            infoText.textContent = "Mechanic can access only assigned station, unit, and tray.";
+            infoText.classList.remove("hidden");
+        }
+
+        // Mark selected stations
+        document.querySelectorAll(".station-checkbox").forEach(cb => {
+            cb.checked = userStations.includes(cb.nextSibling.textContent.trim());
+        });
+
+        // Populate and mark selected units
+        populateUnits(
+            Array.from(document.querySelectorAll(".station-checkbox"))
+                 .filter(cb => cb.checked)
+                 .map(cb => cb.value)
+        );
+        unitContainer.querySelectorAll(".unit-checkbox").forEach(cb => {
+            cb.checked = userUnits.includes(cb.nextSibling.textContent.trim());
+        });
+
+        // Populate and mark selected trays
+        populateTrays(
+            Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                 .filter(cb => cb.checked)
+                 .map(cb => cb.value)
+        );
+        trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+            cb.checked = userTrays.includes(cb.nextSibling.textContent.trim());
+        });
+    }
+
+    modal.classList.remove("hidden");
+  });
+});
+</script>
+</body>
+</html>

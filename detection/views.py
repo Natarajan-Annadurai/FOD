@@ -1,15 +1,15 @@
+import json
+
 from django.contrib.auth import authenticate, login, logout
-from django.contrib import messages
-from django.db.models import Q
 from django.http import JsonResponse
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
-from .models import ToolCreation, ToolPurchase, Inventory
-from django.shortcuts import render, redirect, get_object_or_404
+from .models import ToolCreation, ToolPurchase, UserProfile
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
-from .models import ServiceStation, Unit, Tray, Inventory, TrayTool
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.models import User
+from .models import ToolsTracking
 
 def login_view(request):
     if request.method == 'POST':
@@ -372,3 +372,182 @@ def global_assigned_tools(request):
         }
     }
     return render(request, 'global_assigned_tools.html', context)
+
+from django.contrib.auth.models import Group
+
+@login_required
+def manage_users(request):
+    users = User.objects.all().order_by('username')
+    stations = ServiceStation.objects.all()
+    units = Unit.objects.all()
+    trays = Tray.objects.all()
+
+    # Debug: print user roles before rendering
+    for user in users:
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        group_role = user.groups.first().name if user.groups.exists() else None
+
+        if profile.role:
+            if group_role and profile.role.strip() != group_role.strip():
+                profile.role = group_role.strip()
+                profile.save()
+            user.display_role = profile.role.strip()
+        elif group_role:
+            profile.role = group_role.strip()
+            profile.save()
+            user.display_role = group_role.strip()
+        else:
+            user.display_role = "Not Assigned"
+
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        role = request.POST.get('role').strip() if request.POST.get('role') else None
+        station_ids = request.POST.getlist('stations')
+        unit_ids = request.POST.getlist('units')
+        tray_ids = request.POST.getlist('trays')
+
+        user = get_object_or_404(User, id=user_id)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+
+        # --- Assign access rules and display names ---
+        if role == "Admin":
+            all_stations = ServiceStation.objects.all()
+            all_units = Unit.objects.all()
+            all_trays = Tray.objects.all()
+
+            profile.stations_display = ", ".join([s.name for s in all_stations])
+            profile.units_display = ", ".join([u.name for u in all_units])
+            profile.trays_display = ", ".join([t.tray_name for t in all_trays])
+
+        elif role == "Supervisor":
+            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
+            selected_units = Unit.objects.filter(station_id__in=station_ids)
+            selected_trays = Tray.objects.filter(unit__station_id__in=station_ids)
+
+            profile.stations_display = ", ".join([s.name for s in selected_stations])
+            profile.units_display = ", ".join([u.name for u in selected_units])
+            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
+
+        elif role == "Mechanic":
+            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
+            selected_units = Unit.objects.filter(id__in=unit_ids)
+            selected_trays = Tray.objects.filter(id__in=tray_ids)
+
+            profile.stations_display = ", ".join([s.name for s in selected_stations])
+            profile.units_display = ", ".join([u.name for u in selected_units])
+            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
+
+        # Save IDs as comma-separated strings
+        profile.station_id = ",".join(station_ids) if station_ids else None
+        profile.unit_ids = ",".join(unit_ids) if unit_ids else None
+        profile.tray_id = ",".join(tray_ids) if tray_ids else None
+
+        profile.save()
+
+        # --- Sync Django group ---
+        user.groups.clear()
+        group, _ = Group.objects.get_or_create(name=role)
+        user.groups.add(group)
+        user.save()
+
+        return redirect('manage_users')
+
+    return render(request, 'manage_users.html', {
+        'users': users,
+        'stations': stations,
+        'units': units,
+        'trays': trays,
+    })
+
+def user_assigned_list(request):
+    users = User.objects.all().select_related('userprofile')
+
+    user_data = []
+    for user in users:
+        profile = getattr(user, 'userprofile', None)
+        user_data.append({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': profile.role if profile else 'Not Assigned',
+            'stations_display': profile.stations_display if profile else 'None',
+            'trays_display': profile.trays_display if profile else 'None',
+            'units_display': profile.units_display if profile else 'None',
+        })
+
+    return render(request, 'user_assigned_list.html', {'users': user_data})
+
+# Machine A - Master recevies the client detections
+@csrf_exempt
+def receive_detections(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "Only POST allowed"}, status=405)
+
+    # Simple token auth
+    token = request.headers.get("Authorization")
+    if token != "Bearer MY_SECRET_KEY":
+        return JsonResponse({"detail": "Unauthorized"}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON"}, status=400)
+
+    device_id = data.get("device_id")
+    timestamp = data.get("timestamp") or now()
+    detections = data.get("detections", [])
+
+    saved = []
+    for d in detections:
+        obj = ToolsTracking.objects.create(
+            device_id=device_id,
+            tool_name=d.get("tool"),
+            confidence=d.get("confidence", 0.0),
+            timestamp=timestamp,
+            frame_id=data.get("frame_id"),
+            meta=data.get("meta", {}),
+        )
+        saved.append(obj.id)
+
+    return JsonResponse({"status": "ok", "saved_ids": saved})
+
+
+# Machine B — Detection sender script
+# # send_to_master.py
+# import requests, json, time, socket
+#
+# MASTER_IP = "192.168.1.100"   # Machine A IP
+# API_URL = f"http://{MASTER_IP}:8000/api/detections/"
+# API_KEY = "MY_SECRET_KEY"
+#
+# def send_detection(tool_name, confidence):
+#     payload = {
+#         "device_id": socket.gethostname(),
+#         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+#         "detections": [
+#             {"tool": tool_name, "confidence": confidence}
+#         ],
+#         "frame_id": "frame_001"
+#     }
+#     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+#     try:
+#         r = requests.post(API_URL, headers=headers, data=json.dumps(payload), timeout=5)
+#         print("→ Sent", r.status_code, r.text)
+#     except Exception as e:
+#         print("Send failed:", e)
+#
+# # Example usage
+# send_detection("spanner", 0.97)
+
+def tools_tracking_list(request):
+    search = request.GET.get("search", "")
+    records = ToolsTracking.objects.all().order_by("-timestamp")
+
+    if search:
+        records = records.filter(tool_name__icontains=search)
+
+    return render(request, "tools_tracking_list.html", {
+        "records": records,
+        "search": search
+    })
