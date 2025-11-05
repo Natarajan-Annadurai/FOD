@@ -140,6 +140,32 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.role}"
 
+class ToolEventTracking(models.Model):
+    EVENT_CHOICES = [
+        ('tray_open', 'Tray Open'),
+        ('tray_close', 'Tray Close'),
+        ('tool_Issued', 'Tool Issued'),
+        ('tool_Returned', 'Tool Returned'),
+        ('tool_Damaged', 'Tool Damaged'),
+        ('auto_logout', 'Auto Logout'),
+        ('system_offline', 'System Offline'),
+    ]
+
+    timestamp = models.DateTimeField()
+    user_id = models.CharField(max_length=50, null=True, blank=True)
+    user_name = models.CharField(max_length=100, null=True, blank=True)
+    event = models.CharField(max_length=50, choices=EVENT_CHOICES)
+    tray_id = models.IntegerField(null=True, blank=True)
+
+
+    unit_id = models.IntegerField(null=True, blank=True)
+    tool_id = models.CharField(max_length=50, null=True, blank=True)
+    tool_name = models.CharField(max_length=200, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.event} - {self.tool_name or self.tool_id}"
+
 class ToolsTracking(models.Model):
     device_id = models.CharField(max_length=100)
     tool_name = models.CharField(max_length=100)

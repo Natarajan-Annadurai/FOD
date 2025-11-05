@@ -1,7 +1,8 @@
 import json
-
 from django.contrib.auth import authenticate, login, logout
+from django.core.paginator import Paginator
 from django.http import JsonResponse
+from django.utils import timezone
 from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from .models import ToolCreation, ToolPurchase, UserProfile
@@ -9,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.models import User
-from .models import ToolsTracking
+from .models import ToolsTracking, ToolEventTracking
 
 def login_view(request):
     if request.method == 'POST':
@@ -32,6 +33,75 @@ def logout_view(request):
 @login_required
 def dashboard(request):
     return render(request, 'dashboard.html')
+
+def tool_activity_dashboard(request):
+    # All events ordered by latest
+    events_list = ToolEventTracking.objects.all().order_by('-timestamp')
+
+    # Pagination for events (25 per page)
+    events_paginator = Paginator(events_list, 10)
+    page_number = request.GET.get('events_page', 1)
+    events_page = events_paginator.get_page(page_number)
+
+    # Calculate Tool Usage Duration
+    durations_list = []
+    issued_events = ToolEventTracking.objects.filter(event='tool_Issued').order_by('timestamp')
+    for issued in issued_events:
+        returned = ToolEventTracking.objects.filter(
+            user_id=issued.user_id,
+            tool_id=issued.tool_id,
+            event='tool_Returned',
+            timestamp__gt=issued.timestamp
+        ).order_by('timestamp').first()
+        if returned:
+            duration = returned.timestamp - issued.timestamp
+            durations_list.append({
+                'user_name': issued.user_name,
+                'tool_name': issued.tool_name,
+                'issued_at': issued.timestamp,
+                'returned_at': returned.timestamp,
+                'duration_in_use': duration,
+            })
+
+    # Pagination for durations (25 per page)
+    durations_paginator = Paginator(durations_list, 10)
+    durations_page_number = request.GET.get('durations_page', 1)
+    durations_page = durations_paginator.get_page(durations_page_number)
+
+    # Summary calculations
+    today = timezone.now().date()
+    todays_events = ToolEventTracking.objects.filter(timestamp__date=today)
+    total_events = todays_events.count()
+
+    # Active tools currently in use (issued not returned)
+    active_tools_count = 0
+    active_users_set = set()
+    issued_events_all = ToolEventTracking.objects.filter(event='tool_Issued')
+    for issued in issued_events_all:
+        returned_exists = ToolEventTracking.objects.filter(
+            user_id=issued.user_id,
+            tool_id=issued.tool_id,
+            event='tool_Returned',
+            timestamp__gt=issued.timestamp
+        ).exists()
+        if not returned_exists:
+            active_tools_count += 1
+            active_users_set.add(issued.user_id)
+
+    active_users = len(active_users_set)
+
+    # Damaged tools
+    damaged_tools = ToolEventTracking.objects.filter(event='tool_Damaged').values('tool_id').count()
+
+    context = {
+        'events': events_page,
+        'durations': durations_page,
+        'total_events': total_events,
+        'active_users': active_users,
+        'active_tools': active_tools_count,
+        'damaged_tools': damaged_tools,
+    }
+    return render(request, 'tool_activity_dashboard.html', context)
 
 def tool_creation_view(request):
     if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -319,7 +389,7 @@ def assigned_tools_list(request, tray_id):
     return render(request, 'assigned_tools_list.html', context)
 
 # views.py
-from django.db.models import Q
+from django.db.models import Q, F
 from .models import TrayTool, ServiceStation, Unit, Tray, Inventory
 
 def global_assigned_tools(request):
@@ -477,6 +547,58 @@ def user_assigned_list(request):
         })
 
     return render(request, 'user_assigned_list.html', {'users': user_data})
+
+def inventory_update_api(request):
+    latest_event = ToolEventTracking.objects.order_by('timestamp').first()
+    if not latest_event:
+        return JsonResponse({"success": False, "error": "No recent event found"})
+
+    inventory = Inventory.objects.filter(tool__tool_id=latest_event.tool_id).first()
+    if not inventory:
+        return JsonResponse({"success": False, "error": "Tool not found in inventory"})
+
+    updated = False
+
+    if latest_event.event == "tool_Issued":
+        if inventory.available_quantity > 0:
+            Inventory.objects.filter(pk=inventory.pk).update(
+                in_use=F('in_use') + 1,
+                available_quantity=F('available_quantity') - 1
+            )
+            updated = True
+    elif latest_event.event == "tool_Returned":
+        if inventory.in_use > 0:
+            Inventory.objects.filter(pk=inventory.pk).update(
+                in_use=F('in_use') - 1,
+                available_quantity=F('available_quantity') + 1
+            )
+            updated = True
+    elif latest_event.event == "tool_Damaged":
+        if inventory.available_quantity > 0:
+            Inventory.objects.filter(pk=inventory.pk).update(
+                damaged=F('damaged') + 1,
+                available_quantity=F('available_quantity') - 1
+            )
+            updated = True
+
+    if updated:
+        inventory.refresh_from_db()
+        return JsonResponse({
+            "success": True,
+            "tool_id": inventory.tool_id,
+            "available_quantity": inventory.available_quantity,
+            "in_use": inventory.in_use,
+            "damaged": inventory.damaged,
+            "event": latest_event.event,
+            "timestamp": latest_event.timestamp,
+        })
+    else:
+        return JsonResponse({
+            "success": False,
+            "error": "No inventory update possible for this event",
+            "tool_id": inventory.tool_id,
+            "event": latest_event.event
+        })
 
 # Machine A - Master recevies the client detections
 @csrf_exempt

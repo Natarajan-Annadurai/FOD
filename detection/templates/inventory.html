@@ -14,6 +14,12 @@
       z-index: 10;
     }
   </style>
+    <script>
+    // Auto-refresh every 5 seconds
+    setTimeout(function(){
+       window.location.reload();
+    }, 5000);
+  </script>
 </head>
 <body class="bg-gray-100">
 
@@ -95,7 +101,6 @@
       </table>
     </div>
   </div>
-
   <script>
     function filterTable() {
       const input = document.getElementById("searchInput").value.toLowerCase();
@@ -139,7 +144,36 @@
         }
       }
     }
-  </script>
 
+    async function checkInventoryUpdate() {
+  try {
+    const response = await fetch("{% url 'inventory_update_api' %}");
+    const data = await response.json();
+
+    if (data.success) {
+      const rows = document.querySelectorAll("#inventoryTable tbody tr");
+      rows.forEach(row => {
+        const toolIdCell = row.cells[1];
+        if (toolIdCell && toolIdCell.textContent.trim() === data.toolId) {
+          // Update quantities
+          row.cells[10].textContent = data.assignedQuantity;
+          row.cells[11].textContent = data.availableQuantity;
+          row.cells[13].textContent = data.damaged;
+
+          // Optional: highlight updated row
+          row.style.backgroundColor = '#d1fae5'; // Tailwind green-100
+          setTimeout(() => row.style.backgroundColor = '', 1500);
+        }
+      });
+      console.log("Inventory updated for:", data.toolId, "Event:", data.event);
+    }
+  } catch (err) {
+    console.error("Update check failed:", err);
+  }
+}
+
+// Poll every 10 seconds
+setInterval(checkInventoryUpdate, 10000);
+  </script>
 </body>
 </html>
