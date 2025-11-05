@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Assigned Tools List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+<div class="max-w-7xl mx-auto bg-white shadow-lg rounded-lg p-6">
+  <div class="flex items-center justify-between mb-4">
+    <!-- Title on the left -->
+    <h1 class="text-2xl font-semibold text-gray-700">Assigned Tools List</h1>
+
+    <a href="{% url 'assign_tools' tray_id %}" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+        Back
+    </a>
+  </div>
+  <table class="min-w-full border border-gray-300 text-sm">
+    <thead class="bg-gray-200 text-gray-700">
+      <tr>
+        <th class="px-3 py-2 border">Tray</th>
+        <th class="px-3 py-2 border">Unit</th>
+        <th class="px-3 py-2 border">Service Station</th>
+        <th class="px-3 py-2 border">Tool ID</th>
+        <th class="px-3 py-2 border">Tool Name</th>
+        <th class="px-3 py-2 border">Description</th>
+        <th class="px-3 py-2 border">Part Number</th>
+        <th class="px-3 py-2 border">Brand</th>
+        <th class="px-3 py-2 border">Tool Type</th>
+        <th class="px-3 py-2 border">Inventory ID</th>
+        <th class="px-3 py-2 border">Assigned Qty</th>
+        <th class="px-3 py-2 border">Remarks</th>
+        <th class="px-3 py-2 border">Assigned By</th>
+        <th class="px-3 py-2 border">Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in assigned_tools %}
+      <tr class="hover:bg-gray-50">
+        <td class="border px-2 py-1">{{ item.tray.tray_name }}</td>
+        <td class="border px-2 py-1">{{ item.tray.unit.name }}</td>
+        <td class="border px-2 py-1">{{ item.tray.unit.station.name }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.tool.tool_id }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.tool.tool_name }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.tool.description }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.tool.part_number }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.tool.brand }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.tool.tool_type }}</td>
+        <td class="border px-2 py-1">{{ item.inventory.inventory_id }}</td>
+        <td class="border px-2 py-1">{{ item.assigned_quantity }}</td>
+        <td class="border px-2 py-1">{{ item.remarks }}</td>
+        <td class="border px-2 py-1">
+          {% if item.assigned_by %}
+            {{ item.assigned_by.get_full_name }}
+          {% else %}
+            N/A
+          {% endif %}
+        </td>
+        <td class="border px-2 py-1">{{ item.created_at|date:"d M Y H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="14" class="text-center py-4 text-gray-500">No tools assigned yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

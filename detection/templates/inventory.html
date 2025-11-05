@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Inventory Management</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <style>
     th {
       cursor: pointer;
@@ -13,6 +14,12 @@
       z-index: 10;
     }
   </style>
+    <script>
+    // Auto-refresh every 5 seconds
+    setTimeout(function(){
+       window.location.reload();
+    }, 5000);
+  </script>
 </head>
 <body class="bg-gray-100">
 
@@ -22,9 +29,9 @@
       <h1 class="text-2xl font-semibold text-gray-700">Inventory Overview</h1>
       <button type="button"
               id="backBtn"
-              class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+              class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
               onclick="window.location.href='{% url 'dashboard' %}'">
-        Back
+        Dashboard
       </button>
     </div>
 
@@ -94,7 +101,6 @@
       </table>
     </div>
   </div>
-
   <script>
     function filterTable() {
       const input = document.getElementById("searchInput").value.toLowerCase();
@@ -138,7 +144,36 @@
         }
       }
     }
-  </script>
 
+    async function checkInventoryUpdate() {
+  try {
+    const response = await fetch("{% url 'inventory_update_api' %}");
+    const data = await response.json();
+
+    if (data.success) {
+      const rows = document.querySelectorAll("#inventoryTable tbody tr");
+      rows.forEach(row => {
+        const toolIdCell = row.cells[1];
+        if (toolIdCell && toolIdCell.textContent.trim() === data.toolId) {
+          // Update quantities
+          row.cells[10].textContent = data.assignedQuantity;
+          row.cells[11].textContent = data.availableQuantity;
+          row.cells[13].textContent = data.damaged;
+
+          // Optional: highlight updated row
+          row.style.backgroundColor = '#d1fae5'; // Tailwind green-100
+          setTimeout(() => row.style.backgroundColor = '', 1500);
+        }
+      });
+      console.log("Inventory updated for:", data.toolId, "Event:", data.event);
+    }
+  } catch (err) {
+    console.error("Update check failed:", err);
+  }
+}
+
+// Poll every 10 seconds
+setInterval(checkInventoryUpdate, 10000);
+  </script>
 </body>
 </html>

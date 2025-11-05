@@ -38,7 +38,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8 p-6 w-full max-w-6xl">
 
             <!-- Analytics / Information Board -->
-            <a href="#" class="card bg-gradient-to-br from-blue-400 to-indigo-500 text-white shadow-lg rounded-2xl p-6 flex flex-col items-center hover:shadow-blue-400/60">
+            <a href="#" onclick="window.location.href='{% url 'tool_activity_dashboard' %}'" class="card bg-gradient-to-br from-blue-400 to-indigo-500 text-white shadow-lg rounded-2xl p-6 flex flex-col items-center hover:shadow-blue-400/60">
                 <img src="https://img.icons8.com/ios/100/ffffff/combo-chart.png" class="w-16 mb-3">
                 <h2 class="text-lg font-semibold">Analytics & Information Board</h2>
                 <p class="text-sm mt-2 text-center opacity-90">Visual reports, usage stats, and activity insights.</p>
@@ -72,8 +72,8 @@
                 <p class="text-sm mt-2 text-center opacity-90">Manage Service Station</p>
             </a>
 
-            <!-- Employee Management -->
-            <a href="#" class="card bg-blue-800 text-white rounded-2xl p-6 flex flex-col items-center">
+            <!-- User Management -->
+            <a href="#" onclick="window.location.href='{% url 'manage_users' %}'" class="card bg-blue-800 text-white rounded-2xl p-6 flex flex-col items-center">
                 <img src="https://img.icons8.com/ios/100/ffffff/scale.png" class="w-16 mb-3">
                 <h2 class="text-lg font-semibold">User Management</h2>
                 <p class="text-sm mt-2 text-center opacity-90">Maintain employee data, roles, and departments.</p>

@@ -1,15 +1,16 @@
+import json
 from django.contrib.auth import authenticate, login, logout
-from django.contrib import messages
-from django.db.models import Q
+from django.core.paginator import Paginator
 from django.http import JsonResponse
+from django.utils import timezone
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
-from .models import ToolCreation, ToolPurchase, Inventory
-from django.shortcuts import render, redirect, get_object_or_404
+from .models import ToolCreation, ToolPurchase, UserProfile
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
-from .models import ServiceStation, Unit, Tray, Inventory, TrayTool
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.models import User
+from .models import ToolsTracking, ToolEventTracking
 
 def login_view(request):
     if request.method == 'POST':
@@ -32,6 +33,75 @@ def logout_view(request):
 @login_required
 def dashboard(request):
     return render(request, 'dashboard.html')
+
+def tool_activity_dashboard(request):
+    # All events ordered by latest
+    events_list = ToolEventTracking.objects.all().order_by('-timestamp')
+
+    # Pagination for events (25 per page)
+    events_paginator = Paginator(events_list, 10)
+    page_number = request.GET.get('events_page', 1)
+    events_page = events_paginator.get_page(page_number)
+
+    # Calculate Tool Usage Duration
+    durations_list = []
+    issued_events = ToolEventTracking.objects.filter(event='tool_Issued').order_by('timestamp')
+    for issued in issued_events:
+        returned = ToolEventTracking.objects.filter(
+            user_id=issued.user_id,
+            tool_id=issued.tool_id,
+            event='tool_Returned',
+            timestamp__gt=issued.timestamp
+        ).order_by('timestamp').first()
+        if returned:
+            duration = returned.timestamp - issued.timestamp
+            durations_list.append({
+                'user_name': issued.user_name,
+                'tool_name': issued.tool_name,
+                'issued_at': issued.timestamp,
+                'returned_at': returned.timestamp,
+                'duration_in_use': duration,
+            })
+
+    # Pagination for durations (25 per page)
+    durations_paginator = Paginator(durations_list, 10)
+    durations_page_number = request.GET.get('durations_page', 1)
+    durations_page = durations_paginator.get_page(durations_page_number)
+
+    # Summary calculations
+    today = timezone.now().date()
+    todays_events = ToolEventTracking.objects.filter(timestamp__date=today)
+    total_events = todays_events.count()
+
+    # Active tools currently in use (issued not returned)
+    active_tools_count = 0
+    active_users_set = set()
+    issued_events_all = ToolEventTracking.objects.filter(event='tool_Issued')
+    for issued in issued_events_all:
+        returned_exists = ToolEventTracking.objects.filter(
+            user_id=issued.user_id,
+            tool_id=issued.tool_id,
+            event='tool_Returned',
+            timestamp__gt=issued.timestamp
+        ).exists()
+        if not returned_exists:
+            active_tools_count += 1
+            active_users_set.add(issued.user_id)
+
+    active_users = len(active_users_set)
+
+    # Damaged tools
+    damaged_tools = ToolEventTracking.objects.filter(event='tool_Damaged').values('tool_id').count()
+
+    context = {
+        'events': events_page,
+        'durations': durations_page,
+        'total_events': total_events,
+        'active_users': active_users,
+        'active_tools': active_tools_count,
+        'damaged_tools': damaged_tools,
+    }
+    return render(request, 'tool_activity_dashboard.html', context)
 
 def tool_creation_view(request):
     if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -319,7 +389,7 @@ def assigned_tools_list(request, tray_id):
     return render(request, 'assigned_tools_list.html', context)
 
 # views.py
-from django.db.models import Q
+from django.db.models import Q, F
 from .models import TrayTool, ServiceStation, Unit, Tray, Inventory
 
 def global_assigned_tools(request):
@@ -372,3 +442,234 @@ def global_assigned_tools(request):
         }
     }
     return render(request, 'global_assigned_tools.html', context)
+
+from django.contrib.auth.models import Group
+
+@login_required
+def manage_users(request):
+    users = User.objects.all().order_by('username')
+    stations = ServiceStation.objects.all()
+    units = Unit.objects.all()
+    trays = Tray.objects.all()
+
+    # Debug: print user roles before rendering
+    for user in users:
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        group_role = user.groups.first().name if user.groups.exists() else None
+
+        if profile.role:
+            if group_role and profile.role.strip() != group_role.strip():
+                profile.role = group_role.strip()
+                profile.save()
+            user.display_role = profile.role.strip()
+        elif group_role:
+            profile.role = group_role.strip()
+            profile.save()
+            user.display_role = group_role.strip()
+        else:
+            user.display_role = "Not Assigned"
+
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        role = request.POST.get('role').strip() if request.POST.get('role') else None
+        station_ids = request.POST.getlist('stations')
+        unit_ids = request.POST.getlist('units')
+        tray_ids = request.POST.getlist('trays')
+
+        user = get_object_or_404(User, id=user_id)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+
+        # --- Assign access rules and display names ---
+        if role == "Admin":
+            all_stations = ServiceStation.objects.all()
+            all_units = Unit.objects.all()
+            all_trays = Tray.objects.all()
+
+            profile.stations_display = ", ".join([s.name for s in all_stations])
+            profile.units_display = ", ".join([u.name for u in all_units])
+            profile.trays_display = ", ".join([t.tray_name for t in all_trays])
+
+        elif role == "Supervisor":
+            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
+            selected_units = Unit.objects.filter(station_id__in=station_ids)
+            selected_trays = Tray.objects.filter(unit__station_id__in=station_ids)
+
+            profile.stations_display = ", ".join([s.name for s in selected_stations])
+            profile.units_display = ", ".join([u.name for u in selected_units])
+            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
+
+        elif role == "Mechanic":
+            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
+            selected_units = Unit.objects.filter(id__in=unit_ids)
+            selected_trays = Tray.objects.filter(id__in=tray_ids)
+
+            profile.stations_display = ", ".join([s.name for s in selected_stations])
+            profile.units_display = ", ".join([u.name for u in selected_units])
+            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
+
+        # Save IDs as comma-separated strings
+        profile.station_id = ",".join(station_ids) if station_ids else None
+        profile.unit_ids = ",".join(unit_ids) if unit_ids else None
+        profile.tray_id = ",".join(tray_ids) if tray_ids else None
+
+        profile.save()
+
+        # --- Sync Django group ---
+        user.groups.clear()
+        group, _ = Group.objects.get_or_create(name=role)
+        user.groups.add(group)
+        user.save()
+
+        return redirect('manage_users')
+
+    return render(request, 'manage_users.html', {
+        'users': users,
+        'stations': stations,
+        'units': units,
+        'trays': trays,
+    })
+
+def user_assigned_list(request):
+    users = User.objects.all().select_related('userprofile')
+
+    user_data = []
+    for user in users:
+        profile = getattr(user, 'userprofile', None)
+        user_data.append({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': profile.role if profile else 'Not Assigned',
+            'stations_display': profile.stations_display if profile else 'None',
+            'trays_display': profile.trays_display if profile else 'None',
+            'units_display': profile.units_display if profile else 'None',
+        })
+
+    return render(request, 'user_assigned_list.html', {'users': user_data})
+
+def inventory_update_api(request):
+    latest_event = ToolEventTracking.objects.order_by('timestamp').first()
+    if not latest_event:
+        return JsonResponse({"success": False, "error": "No recent event found"})
+
+    inventory = Inventory.objects.filter(tool__tool_id=latest_event.tool_id).first()
+    if not inventory:
+        return JsonResponse({"success": False, "error": "Tool not found in inventory"})
+
+    updated = False
+
+    if latest_event.event == "tool_Issued":
+        if inventory.available_quantity > 0:
+            Inventory.objects.filter(pk=inventory.pk).update(
+                in_use=F('in_use') + 1,
+                available_quantity=F('available_quantity') - 1
+            )
+            updated = True
+    elif latest_event.event == "tool_Returned":
+        if inventory.in_use > 0:
+            Inventory.objects.filter(pk=inventory.pk).update(
+                in_use=F('in_use') - 1,
+                available_quantity=F('available_quantity') + 1
+            )
+            updated = True
+    elif latest_event.event == "tool_Damaged":
+        if inventory.available_quantity > 0:
+            Inventory.objects.filter(pk=inventory.pk).update(
+                damaged=F('damaged') + 1,
+                available_quantity=F('available_quantity') - 1
+            )
+            updated = True
+
+    if updated:
+        inventory.refresh_from_db()
+        return JsonResponse({
+            "success": True,
+            "tool_id": inventory.tool_id,
+            "available_quantity": inventory.available_quantity,
+            "in_use": inventory.in_use,
+            "damaged": inventory.damaged,
+            "event": latest_event.event,
+            "timestamp": latest_event.timestamp,
+        })
+    else:
+        return JsonResponse({
+            "success": False,
+            "error": "No inventory update possible for this event",
+            "tool_id": inventory.tool_id,
+            "event": latest_event.event
+        })
+
+# Machine A - Master recevies the client detections
+@csrf_exempt
+def receive_detections(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "Only POST allowed"}, status=405)
+
+    # Simple token auth
+    token = request.headers.get("Authorization")
+    if token != "Bearer MY_SECRET_KEY":
+        return JsonResponse({"detail": "Unauthorized"}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON"}, status=400)
+
+    device_id = data.get("device_id")
+    timestamp = data.get("timestamp") or now()
+    detections = data.get("detections", [])
+
+    saved = []
+    for d in detections:
+        obj = ToolsTracking.objects.create(
+            device_id=device_id,
+            tool_name=d.get("tool"),
+            confidence=d.get("confidence", 0.0),
+            timestamp=timestamp,
+            frame_id=data.get("frame_id"),
+            meta=data.get("meta", {}),
+        )
+        saved.append(obj.id)
+
+    return JsonResponse({"status": "ok", "saved_ids": saved})
+
+
+# Machine B — Detection sender script
+# # send_to_master.py
+# import requests, json, time, socket
+#
+# MASTER_IP = "192.168.1.100"   # Machine A IP
+# API_URL = f"http://{MASTER_IP}:8000/api/detections/"
+# API_KEY = "MY_SECRET_KEY"
+#
+# def send_detection(tool_name, confidence):
+#     payload = {
+#         "device_id": socket.gethostname(),
+#         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+#         "detections": [
+#             {"tool": tool_name, "confidence": confidence}
+#         ],
+#         "frame_id": "frame_001"
+#     }
+#     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+#     try:
+#         r = requests.post(API_URL, headers=headers, data=json.dumps(payload), timeout=5)
+#         print("→ Sent", r.status_code, r.text)
+#     except Exception as e:
+#         print("Send failed:", e)
+#
+# # Example usage
+# send_detection("spanner", 0.97)
+
+def tools_tracking_list(request):
+    search = request.GET.get("search", "")
+    records = ToolsTracking.objects.all().order_by("-timestamp")
+
+    if search:
+        records = records.filter(tool_name__icontains=search)
+
+    return render(request, "tools_tracking_list.html", {
+        "records": records,
+        "search": search
+    })

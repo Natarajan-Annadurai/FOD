@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foreign Object Detection System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .detection-area {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .detection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+        }
+
+        .status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .status.active {
+            background: #4CAF50;
+        }
+
+        .status.inactive {
+            background: #f44336;
+        }
+
+        .video-container {
+            width: 100%;
+            height: 350px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .video-placeholder {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .video-placeholder i {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0b7dda;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+            transform: translateY(-2px);
+        }
+
+        .detection-results {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .results-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .result-item {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .object-type {
+            font-weight: bold;
+        }
+
+        .confidence {
+            color: #4CAF50;
+        }
+
+        .settings-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .setting-group {
+            margin-bottom: 25px;
+        }
+
+        .setting-label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .slider-value {
+            min-width: 40px;
+            text-align: center;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+
+        /* Animation for detected objects */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+        }
+
+        .detected {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Foreign Object Detection</h1>
+            <p class="subtitle">Advanced AI-powered detection system for identifying foreign objects in real-time</p>
+        </header>
+
+        <div class="main-content">
+            <div class="detection-area">
+                <div class="detection-header">
+                    <h2>Detection Feed</h2>
+                    <div class="status active">ACTIVE</div>
+                </div>
+
+                <div class="video-container" id="videoFeed">
+                    <div class="video-placeholder">
+                        <i>📷</i>
+                        <p>Camera feed will appear here</p>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn-primary" id="startDetection">
+                        <span>▶</span> Start Detection
+                    </button>
+                    <button class="btn-secondary" id="pauseDetection">
+                        <span>⏸</span> Pause
+                    </button>
+                    <button class="btn-danger" id="stopDetection">
+                        <span>⏹</span> Stop
+                    </button>
+                </div>
+
+                <div class="detection-results">
+                    <div class="results-header">
+                        <h3>Detection Results</h3>
+                        <div>Objects Found: <span id="objectCount">0</span></div>
+                    </div>
+                    <div class="results-list" id="resultsList">
+                        <!-- Detection results will appear here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-panel">
+                <h2>Detection Settings</h2>
+
+                <div class="setting-group">
+                    <label class="setting-label">Detection Sensitivity</label>
+                    <div class="slider-container">
+                        <input type="range" id="sensitivity" min="1" max="100" value="75">
+                        <span class="slider-value" id="sensitivityValue">75%</span>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Detection Speed</label>
+                    <div class="slider-container">
+                        <input type="range" id="speed" min="1" max="10" value="5">
+                        <span class="slider-value" id="speedValue">5</span>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Object Types to Detect</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="metalObjects" checked>
+                        <label for="metalObjects">Metal Objects</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="plasticObjects" checked>
+                        <label for="plasticObjects">Plastic Objects</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="glassObjects">
+                        <label for="glassObjects">Glass Objects</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="organicObjects">
+                        <label for="organicObjects">Organic Materials</label>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Alert Threshold</label>
+                    <div class="slider-container">
+                        <input type="range" id="threshold" min="1" max="100" value="80">
+                        <span class="slider-value" id="thresholdValue">80%</span>
+                    </div>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Detection Accuracy</div>
+                        <div class="stat-value">94.7%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Processing Time</div>
+                        <div class="stat-value">32ms</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Objects Detected</div>
+                        <div class="stat-value" id="totalObjects">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">False Positives</div>
+                        <div class="stat-value">2.1%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Foreign Object Detection System v2.1 | Secure & Confidential</p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM Elements
+        const startBtn = document.getElementById('startDetection');
+        const pauseBtn = document.getElementById('pauseDetection');
+        const stopBtn = document.getElementById('stopDetection');
+        const videoFeed = document.getElementById('videoFeed');
+        const resultsList = document.getElementById('resultsList');
+        const objectCount = document.getElementById('objectCount');
+        const totalObjects = document.getElementById('totalObjects');
+
+        // Sliders
+        const sensitivitySlider = document.getElementById('sensitivity');
+        const sensitivityValue = document.getElementById('sensitivityValue');
+        const speedSlider = document.getElementById('speed');
+        const speedValue = document.getElementById('speedValue');
+        const thresholdSlider = document.getElementById('threshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+
+        // Checkboxes
+        const metalObjects = document.getElementById('metalObjects');
+        const plasticObjects = document.getElementById('plasticObjects');
+        const glassObjects = document.getElementById('glassObjects');
+        const organicObjects = document.getElementById('organicObjects');
+
+        // State variables
+        let isDetecting = false;
+        let detectionInterval;
+        let objectsDetected = 0;
+
+        // Sample foreign objects for simulation
+        const foreignObjects = [
+            { type: 'Metal Screw', confidence: 92 },
+            { type: 'Plastic Fragment', confidence: 87 },
+            { type: 'Glass Shard', confidence: 78 },
+            { type: 'Wood Splinter', confidence: 82 },
+            { type: 'Stone', confidence: 75 },
+            { type: 'Paper Clip', confidence: 95 }
+        ];
+
+        // Event Listeners
+        startBtn.addEventListener('click', startDetection);
+        pauseBtn.addEventListener('click', pauseDetection);
+        stopBtn.addEventListener('click', stopDetection);
+
+        sensitivitySlider.addEventListener('input', updateSensitivity);
+        speedSlider.addEventListener('input', updateSpeed);
+        thresholdSlider.addEventListener('input', updateThreshold);
+
+        // Functions
+        function startDetection() {
+            if (isDetecting) return;
+
+            isDetecting = true;
+            videoFeed.classList.add('detected');
+            videoFeed.innerHTML = `
+                <div style="width:100%; height:100%; background:linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://placehold.co/600x400/1a2a6c/ffffff?text=Live+Detection+Feed'); background-size:cover; display:flex; align-items:center; justify-content:center; border-radius:10px;">
+                    <div style="text-align:center; color:white;">
+                        <div style="font-size:3rem;">🔍</div>
+                        <h3>Live Detection Active</h3>
+                        <p>Scanning for foreign objects...</p>
+                    </div>
+                </div>
+            `;
+
+            // Simulate detection process
+            detectionInterval = setInterval(simulateDetection, 2000);
+
+            updateUI();
+        }
+
+        function pauseDetection() {
+            if (!isDetecting) return;
+
+            isDetecting = false;
+            videoFeed.classList.remove('detected');
+            clearInterval(detectionInterval);
+
+            updateUI();
+        }
+
+        function stopDetection() {
+            isDetecting = false;
+            videoFeed.classList.remove('detected');
+            clearInterval(detectionInterval);
+
+            videoFeed.innerHTML = `
+                <div class="video-placeholder">
+                    <i>📷</i>
+                    <p>Camera feed will appear here</p>
+                </div>
+            `;
+
+            // Clear results
+            resultsList.innerHTML = '';
+            objectCount.textContent = '0';
+            objectsDetected = 0;
+            totalObjects.textContent = '0';
+
+            updateUI();
+        }
+
+        function simulateDetection() {
+            // Clear previous results
+            resultsList.innerHTML = '';
+
+            // Random number of objects to detect
+            const numObjects = Math.floor(Math.random() * 4) + 1;
+            let currentObjects = 0;
+
+            // Add random objects to results
+            for (let i = 0; i < numObjects; i++) {
+                const randomObject = foreignObjects[Math.floor(Math.random() * foreignObjects.length)];
+
+                // Check if this object type is enabled
+                if (
+                    (randomObject.type.includes('Metal') && metalObjects.checked) ||
+                    (randomObject.type.includes('Plastic') && plasticObjects.checked) ||
+                    (randomObject.type.includes('Glass') && glassObjects.checked) ||
+                    (randomObject.type.includes('Wood') && organicObjects.checked) ||
+                    (randomObject.type.includes('Stone') && organicObjects.checked) ||
+                    (randomObject.type.includes('Paper') && metalObjects.checked)
+                ) {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    resultItem.innerHTML = `
+                        <span class="object-type">${randomObject.type}</span>
+                        <span class="confidence">${randomObject.confidence}%</span>
+                    `;
+                    resultsList.appendChild(resultItem);
+                    currentObjects++;
+                    objectsDetected++;
+                }
+            }
+
+            objectCount.textContent = currentObjects;
+            totalObjects.textContent = objectsDetected;
+        }
+
+        function updateSensitivity() {
+            sensitivityValue.textContent = `${sensitivitySlider.value}%`;
+        }
+
+        function updateSpeed() {
+            speedValue.textContent = speedSlider.value;
+
+            if (isDetecting) {
+                clearInterval(detectionInterval);
+                const intervalTime = 2200 - (speedSlider.value * 200);
+                detectionInterval = setInterval(simulateDetection, intervalTime);
+            }
+        }
+
+        function updateThreshold() {
+            thresholdValue.textContent = `${thresholdSlider.value}%`;
+        }
+
+        function updateUI() {
+            if (isDetecting) {
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                stopBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                stopBtn.disabled = false;
+            }
+        }
+
+        // Initialize
+        updateUI();
+    </script>
+</body>
+</html>

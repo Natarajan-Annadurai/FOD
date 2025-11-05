@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Tray | {{ unit.name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+
+<div class="max-w-6xl mx-auto mt-10 bg-white shadow-lg rounded-lg p-6">
+
+   <div class="flex items-center justify-between mb-4">
+     <h1 class="text-2xl font-semibold text-gray-700 mb-6">
+        Add Tray to Unit: {{ unit.name }}
+     </h1>
+  </div>
+
+  <!-- Tray Creation Form -->
+  <form method="post" class="mb-8 border-b pb-6">
+    {% csrf_token %}
+    <input type="hidden" name="unit_id" value="{{ unit.id }}">
+
+    <div class="mb-4">
+      <label class="block text-gray-700 mb-2">Tray Name</label>
+      <input type="text" name="tray_name" placeholder="Enter tray name"
+             class="border px-3 py-2 w-full rounded" required>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-gray-700 mb-2">Max Capacity (optional)</label>
+      <input type="number" name="max_capacity" placeholder="Number of tools"
+             class="border px-3 py-2 w-full rounded" min="1">
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-gray-700 mb-2">Remarks</label>
+      <textarea name="remarks" placeholder="Optional notes"
+                class="border px-3 py-2 w-full rounded" rows="2"></textarea>
+    </div>
+
+    <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+      + Create Tray
+    </button>
+    <a href="{% url 'service_station_list' %}"
+         class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">
+        Service Station
+    </a>
+
+    <a href="{% url 'create_unit' station_id=unit.station.id %}"
+       class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+        Back
+    </a>
+  </form>
+
+  <!-- Existing Trays Table -->
+  <h2 class="text-xl font-semibold mb-4">Existing Trays</h2>
+  <table class="min-w-full border border-gray-300 text-sm">
+    <thead class="bg-gray-200 text-gray-700">
+      <tr>
+        <th class="px-4 py-2 border">Tray ID</th>
+        <th class="px-4 py-2 border">Tray Name</th>
+        <th class="px-4 py-2 border">Max Capacity</th>
+        <th class="px-4 py-2 border">Tools Assigned</th>
+        <th class="px-4 py-2 border">Remarks</th>
+        <th class="px-4 py-2 border text-center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tray in trays %}
+      <tr class="hover:bg-gray-50">
+        <td class="border px-4 py-2 text-center">{{ tray.tray_id }}</td>
+        <td class="border px-4 py-2">{{ tray.tray_name }}</td>
+        <td class="border px-4 py-2 text-center">{{ tray.max_capacity|default:"—" }}</td>
+        <td class="border px-4 py-2">
+            {% if tray.tray_tools.all %}
+              <ul class="list-disc pl-5">
+                {% for tray_tool in tray.tray_tools.all %}
+                  <li>{{ tray_tool.inventory.tool.tool_name }} ({{ tray_tool.inventory.tool.tool_id }}) — Qty: {{ tray_tool.assigned_quantity }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              —
+            {% endif %}
+        </td>
+        <td class="border px-4 py-2">{{ tray.remarks|default:"—" }}</td>
+        <td class="border px-4 py-2 text-center">
+          <a href="{% url 'assign_tools' tray.id %}"
+             class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
+            Assign Tools
+          </a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="text-center py-4 text-gray-500">
+          No trays created yet
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+</div>
+</body>
+</html>
