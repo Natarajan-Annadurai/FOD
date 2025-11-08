@@ -1,0 +1,181 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tool Activity Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    /* Row hover animation */
+    tbody tr:hover {
+      background-color: #f0f9ff;
+      transition: background-color 0.3s;
+    }
+    /* Sticky headers */
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f3f4f6;
+      z-index: 10;
+    }
+    /* Alternate row colors */
+    tbody tr:nth-child(even) {
+      background-color: #f9fafb;
+    }
+    /* Card hover */
+    .summary-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    }
+    /* Pagination hover */
+    .pagination a:hover {
+      background-color: #e5e7eb;
+    }
+  </style>
+  <script>
+    // Auto-refresh every 5 seconds
+    setTimeout(function(){
+       window.location.reload();
+    }, 5000);
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+
+  <!-- Header -->
+  <div class="flex flex-col md:flex-row items-center justify-between mb-6 border-b pb-4">
+    <h2 class="text-3xl font-bold text-gray-800 mb-4 md:mb-0">
+      🧰 Tool Activity Dashboard
+    </h2>
+    <button type="button"
+            class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+            onclick="window.location.href='{% url 'dashboard' %}'">
+      Back to Main Dashboard
+    </button>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow summary-card text-center">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">Total Events Today</h3>
+      <p class="text-3xl font-bold text-blue-600">{{ total_events }}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow summary-card text-center">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">Active Users</h3>
+      <p class="text-3xl font-bold text-green-600">{{ active_users }}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow summary-card text-center">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">Tools In Use</h3>
+      <p class="text-3xl font-bold text-indigo-600">{{ active_tools }}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow summary-card text-center">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">Total Damaged Tools</h3>
+      <p class="text-3xl font-bold text-red-600">{{ damaged_tools }}</p>
+    </div>
+  </div>
+
+  <!-- Recent Events Table -->
+  <div class="bg-white p-6 rounded-lg shadow mb-8 overflow-x-auto">
+    <h3 class="text-xl font-semibold mb-4 text-gray-700">Recent Tool Events</h3>
+    <table class="w-full border-collapse table-auto">
+      <thead>
+        <tr class="bg-gray-200 text-gray-700">
+          <th class="p-2 text-left">User ID</th>
+          <th class="p-2 text-left">User</th>
+          <th class="p-2 text-left">Tool ID</th>
+          <th class="p-2 text-left">Tool</th>
+          <th class="p-2 text-left">Event</th>
+          <th class="p-2 text-left">Timestamp</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in events %}
+        <tr class="border-b">
+          <td class="p-2">{{ e.user_id }}</td>
+          <td class="p-2 font-medium">{{ e.user_name }}</td>
+          <td class="p-2">{{ e.tool_id }}</td>
+          <td class="p-2 font-medium">{{ e.tool_name }}</td>
+          <td class="p-2 font-semibold">
+            {% if e.event == 'tool_Issued' %}
+              <span class="text-blue-600">{{ e.event }}</span>
+            {% elif e.event == 'tool_Returned' %}
+              <span class="text-green-600">{{ e.event }}</span>
+            {% elif e.event == 'tool_Damaged' %}
+              <span class="text-red-600">{{ e.event }}</span>
+            {% else %}
+              {{ e.event }}
+            {% endif %}
+          </td>
+          <td class="p-2">{{ e.timestamp|date:"Y-m-d H:i:s" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center p-4 text-gray-500">No activity yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Pagination for Events -->
+    <div class="mt-4 flex justify-center items-center space-x-2 pagination">
+      {% if events.has_previous %}
+        <a href="?events_page={{ events.previous_page_number }}" class="px-3 py-1 bg-gray-200 rounded">Previous</a>
+      {% endif %}
+      {% for num in events.paginator.page_range %}
+        {% if events.number == num %}
+          <span class="px-3 py-1 bg-blue-500 text-white rounded">{{ num }}</span>
+        {% elif num > events.number|add:'-3' and num < events.number|add:'3' %}
+          <a href="?events_page={{ num }}" class="px-3 py-1 bg-gray-200 rounded">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if events.has_next %}
+        <a href="?events_page={{ events.next_page_number }}" class="px-3 py-1 bg-gray-200 rounded">Next</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tool Usage Duration Table -->
+  <div class="bg-white p-6 rounded-lg shadow mb-8 overflow-x-auto">
+    <h3 class="text-xl font-semibold mb-4 text-gray-700">Tool Usage Duration</h3>
+    <table class="w-full border-collapse table-auto">
+      <thead>
+        <tr class="bg-gray-200 text-gray-700">
+          <th class="p-2 text-left">User</th>
+          <th class="p-2 text-left">Tool</th>
+          <th class="p-2 text-left">Issued At</th>
+          <th class="p-2 text-left">Returned At</th>
+          <th class="p-2 text-left">Duration In Use</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in durations %}
+        <tr class="border-b">
+          <td class="p-2 font-medium">{{ d.user_name }}</td>
+          <td class="p-2 font-medium">{{ d.tool_name }}</td>
+          <td class="p-2">{{ d.issued_at|date:"Y-m-d H:i:s" }}</td>
+          <td class="p-2">{{ d.returned_at|date:"Y-m-d H:i:s" }}</td>
+          <td class="p-2 text-blue-600 font-semibold">{{ d.duration_in_use }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center p-4 text-gray-500">No duration data yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Pagination for Durations -->
+    <div class="mt-4 flex justify-center items-center space-x-2 pagination">
+      {% if durations.has_previous %}
+        <a href="?durations_page={{ durations.previous_page_number }}" class="px-3 py-1 bg-gray-200 rounded">Previous</a>
+      {% endif %}
+      {% for num in durations.paginator.page_range %}
+        {% if durations.number == num %}
+          <span class="px-3 py-1 bg-blue-500 text-white rounded">{{ num }}</span>
+        {% elif num > durations.number|add:'-3' and num < durations.number|add:'3' %}
+          <a href="?durations_page={{ num }}" class="px-3 py-1 bg-gray-200 rounded">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if durations.has_next %}
+        <a href="?durations_page={{ durations.next_page_number }}" class="px-3 py-1 bg-gray-200 rounded">Next</a>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>
