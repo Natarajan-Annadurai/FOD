@@ -106,7 +106,13 @@
             </thead>
             <tbody id="toolTableBody">
               {% for tool in tools %}
-              <tr class="border-b hover:bg-gray-50 small">
+              <tr class="border-b hover:bg-gray-50 small"
+                  data-tool-id="{{ tool.tool_id }}"
+                  data-tool-name="{{ tool.tool_name }}"
+                  data-brand="{{ tool.brand }}"
+                  data-part-number="{{ tool.part_number }}"
+                  data-tool-type="{{ tool.tool_type }}"
+                  data-remarks="{{ tool.remarks }}">
                 <td class="px-2 py-2">{{ forloop.counter }}</td>
                 <td class="px-2 py-2">{{ tool.tool_id }}</td>
                 <td class="px-2 py-2">{{ tool.tool_name }}</td>
@@ -115,12 +121,10 @@
                 <td class="px-2 py-2">{{ tool.tool_type }}</td>
                 <td class="px-2 py-2 small">
                   <div class="flex flex-row flex-nowrap gap-1">
-                     <button data-id="{{ tool.id }}" class="editBtn px-2 py-1 mr-1 bg-yellow-400 rounded">Edit</button>
-                     <button data-id="{{ tool.id }}" class="deleteBtn px-2 py-1 bg-red-500 text-white rounded">Delete</button>
-                     <button data-id="{{ tool.id }}" data-name="{{ tool.tool_name }}" class="purchaseBtn px-2 py-1 bg-blue-500 text-white rounded">Purchase</button>
-
+                    <button data-id="{{ tool.id }}" class="editBtn px-2 py-1 mr-1 bg-yellow-400 rounded">Edit</button>
+                    <button data-id="{{ tool.id }}" class="deleteBtn px-2 py-1 bg-red-500 text-white rounded">Delete</button>
+                    <button data-id="{{ tool.id }}" data-name="{{ tool.tool_name }}" class="purchaseBtn px-2 py-1 bg-blue-500 text-white rounded">Purchase</button>
                   </div>
-
                 </td>
               </tr>
               {% empty %}
@@ -378,6 +382,38 @@ document.getElementById('purchaseForm').addEventListener('submit', function(e){
             alert('Error saving purchase');
         }
     });
+});
+
+document.querySelectorAll('.deleteBtn').forEach(btn => {
+  btn.onclick = function(){
+    if(confirm('Delete this tool?')){
+      fetch(`/tool_creation/delete/${btn.dataset.id}/`,{
+        method:'POST',
+        headers:{
+          'X-CSRFToken':'{{ csrf_token }}',
+          'X-Requested-With':'XMLHttpRequest'
+        }
+      }).then(res=>res.json()).then(data=>{
+        if(data.status=='success') location.reload();
+      });
+    }
+  }
+});
+
+document.querySelectorAll('.editBtn').forEach(btn => {
+  btn.onclick = function(){
+    const row = btn.closest('tr');
+    document.getElementById('internal_id').value = btn.dataset.id;
+    document.getElementById('tool_id').value = row.dataset.toolId;
+    document.getElementById('tool_name').value = row.dataset.toolName;
+    document.getElementById('brand').value = row.dataset.brand;
+    document.getElementById('part_number').value = row.dataset.partNumber;
+    document.getElementById('tool_type').value = row.dataset.toolType;
+    document.getElementById('remarks').value = row.dataset.remarks || '';
+
+    // Scroll to form
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
 });
 </script>
 

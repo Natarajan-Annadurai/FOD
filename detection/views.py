@@ -1,17 +1,19 @@
 import json
+import socket
+from datetime import datetime
 from django.contrib.auth import authenticate, login, logout
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.utils import timezone
-from django.utils.timezone import now
-from django.views.decorators.csrf import csrf_exempt
-from .models import ToolCreation, ToolPurchase, UserProfile
+from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.models import User
-from .models import ToolsTracking, ToolEventTracking
+from .models import ToolEventTracking
+from django.views.decorators.csrf import csrf_exempt
 
+@csrf_exempt
 def login_view(request):
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -43,25 +45,41 @@ def tool_activity_dashboard(request):
     page_number = request.GET.get('events_page', 1)
     events_page = events_paginator.get_page(page_number)
 
-    # Calculate Tool Usage Duration
+    # Calculate Tool Usage Duration (anyone returned)
     durations_list = []
-    issued_events = ToolEventTracking.objects.filter(event='tool_Issued').order_by('timestamp')
-    for issued in issued_events:
-        returned = ToolEventTracking.objects.filter(
-            user_id=issued.user_id,
-            tool_id=issued.tool_id,
-            event='tool_Returned',
-            timestamp__gt=issued.timestamp
-        ).order_by('timestamp').first()
-        if returned:
-            duration = returned.timestamp - issued.timestamp
-            durations_list.append({
-                'user_name': issued.user_name,
-                'tool_name': issued.tool_name,
-                'issued_at': issued.timestamp,
-                'returned_at': returned.timestamp,
-                'duration_in_use': duration,
-            })
+
+    # Get all tool_ids
+    tool_ids = ToolEventTracking.objects.values_list('tool_id', flat=True).distinct()
+
+    for tool_id in tool_ids:
+        # Get all events for this tool ordered by timestamp
+        events = ToolEventTracking.objects.filter(tool_id=tool_id).order_by('timestamp')
+
+        last_issued = None
+        for event in events:
+            if event.event == 'tool_Issued':
+                last_issued = event  # remember latest issued
+            elif event.event == 'tool_Returned' and last_issued:
+                # Calculate duration from last issued to this returned
+                duration = event.timestamp - last_issued.timestamp
+                durations_list.append({
+                    'tool_id': tool_id,
+                    'tool_name': last_issued.tool_name,
+                    'issued_by': last_issued.user_name,
+                    'returned_by': event.user_name,
+                    'service_station': last_issued.service_station,
+                    'unit': last_issued.unit,
+                    'tray_id': last_issued.tray_id,
+                    'client_ip': last_issued.client_ip,
+                    'device_id': last_issued.device_id,
+                    'issued_at': last_issued.timestamp,
+                    'returned_at': event.timestamp,
+                    'duration_in_use': duration,
+                })
+                last_issued = None
+
+        # Sort newest issued first
+        durations_list = sorted(durations_list, key=lambda x: x['issued_at'], reverse=True)
 
     # Pagination for durations (25 per page)
     durations_paginator = Paginator(durations_list, 10)
@@ -73,20 +91,22 @@ def tool_activity_dashboard(request):
     todays_events = ToolEventTracking.objects.filter(timestamp__date=today)
     total_events = todays_events.count()
 
-    # Active tools currently in use (issued not returned)
+    # Get latest event per tool_id
+    latest_tool_events = ToolEventTracking.objects.values('tool_id').annotate(
+        last_event_time=Max('timestamp')
+    )
+
     active_tools_count = 0
     active_users_set = set()
-    issued_events_all = ToolEventTracking.objects.filter(event='tool_Issued')
-    for issued in issued_events_all:
-        returned_exists = ToolEventTracking.objects.filter(
-            user_id=issued.user_id,
-            tool_id=issued.tool_id,
-            event='tool_Returned',
-            timestamp__gt=issued.timestamp
-        ).exists()
-        if not returned_exists:
+
+    for item in latest_tool_events:
+        latest_event = ToolEventTracking.objects.filter(
+            tool_id=item['tool_id'],
+            timestamp=item['last_event_time']
+        ).first()
+        if latest_event and latest_event.event == 'tool_Issued':
             active_tools_count += 1
-            active_users_set.add(issued.user_id)
+            active_users_set.add(latest_event.user_id)
 
     active_users = len(active_users_set)
 
@@ -103,8 +123,74 @@ def tool_activity_dashboard(request):
     }
     return render(request, 'tool_activity_dashboard.html', context)
 
+from django.db.models import Subquery, OuterRef
+
+def tools_in_use(request):
+    # Step 1️⃣: Find latest event timestamp for each tool
+    latest_event_subquery = (
+        ToolEventTracking.objects
+        .filter(tool_id=OuterRef('tool_id'))
+        .order_by('-timestamp')
+        .values('timestamp')[:1]
+    )
+
+    # Step 2️⃣: Select latest records per tool
+    latest_records = ToolEventTracking.objects.filter(
+        timestamp=Subquery(latest_event_subquery)
+    )
+
+    # Step 3️⃣: Keep only those whose latest event is "tool_Issued"
+    in_use_tools = latest_records.filter(event__iexact='tool_Issued')
+
+    # Step 4️⃣: Apply filters from GET parameters
+    filters = {
+        'user_name': request.GET.get('user_name', '').strip(),
+        'tray_id': request.GET.get('tray_id', '').strip(),
+        'service_station': request.GET.get('service_station', '').strip(),
+        'unit': request.GET.get('unit', '').strip(),
+        'tool_name': request.GET.get('tool_name', '').strip(),
+        'client_ip': request.GET.get('client_ip', '').strip(),
+    }
+
+    if filters['user_name']:
+        in_use_tools = in_use_tools.filter(user_name__icontains=filters['user_name'])
+    if filters['tray_id']:
+        in_use_tools = in_use_tools.filter(tray_id__icontains=filters['tray_id'])
+    if filters['service_station']:
+        in_use_tools = in_use_tools.filter(service_station__icontains=filters['service_station'])
+    if filters['unit']:
+        in_use_tools = in_use_tools.filter(unit__icontains=filters['unit'])
+    if filters['tool_name']:
+        in_use_tools = in_use_tools.filter(tool_name__icontains=filters['tool_name'])
+    if filters['client_ip']:
+        in_use_tools = in_use_tools.filter(client_ip__icontains=filters['client_ip'])
+
+    in_use_tools = in_use_tools.order_by('-timestamp')
+
+    # Step 5️⃣: Build dropdown options (distinct lists)
+    user_list = ToolEventTracking.objects.exclude(user_name__isnull=True).values_list('user_name', flat=True).distinct().order_by('user_name')
+    tray_list = ToolEventTracking.objects.exclude(tray_id__isnull=True).values_list('tray_id', flat=True).distinct().order_by('tray_id')
+    station_list = ToolEventTracking.objects.exclude(service_station__isnull=True).values_list('service_station', flat=True).distinct().order_by('service_station')
+    unit_list = ToolEventTracking.objects.exclude(unit__isnull=True).values_list('unit', flat=True).distinct().order_by('unit')
+    tool_list = ToolEventTracking.objects.exclude(tool_name__isnull=True).values_list('tool_name', flat=True).distinct().order_by('tool_name')
+    ip_list = ToolEventTracking.objects.exclude(client_ip__isnull=True).values_list('client_ip', flat=True).distinct().order_by('client_ip')
+
+    context = {
+        'in_use_tools': in_use_tools,
+        'filters': filters,
+        'user_list': user_list,
+        'tray_list': tray_list,
+        'station_list': station_list,
+        'unit_list': unit_list,
+        'tool_list': tool_list,
+        'ip_list': ip_list,
+    }
+
+    return render(request, 'tools_in_use.html', context)
+
 def tool_creation_view(request):
     if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        internal_id = request.POST.get('internal_id')  # hidden field in form
         tool_id = request.POST.get('tool_id')
         tool_name = request.POST.get('tool_name')
         description = request.POST.get('description')
@@ -116,22 +202,45 @@ def tool_creation_view(request):
         if not tool_name or not tool_id:
             return JsonResponse({'status':'error', 'errors':'Tool ID and Name are required'})
 
-        obj, created = ToolCreation.objects.update_or_create(
-            tool_id=tool_id,
-            defaults={
-                'tool_name': tool_name,
-                'description': description,
-                'part_number': part_number,
-                'brand': brand,
-                'tool_type': tool_type,
-                'remarks': remarks,
-            }
-        )
-        return JsonResponse({'status':'success', 'created':created})
+        if internal_id:  # EDIT existing tool
+            obj = get_object_or_404(ToolCreation, pk=internal_id)
+            obj.tool_id = tool_id
+            obj.tool_name = tool_name
+            obj.description = description
+            obj.part_number = part_number
+            obj.brand = brand
+            obj.tool_type = tool_type
+            obj.remarks = remarks
+            obj.save()
+            created = False
+        else:  # CREATE new tool
+            obj = ToolCreation.objects.create(
+                tool_id=tool_id,
+                tool_name=tool_name,
+                description=description,
+                part_number=part_number,
+                brand=brand,
+                tool_type=tool_type,
+                remarks=remarks,
+            )
+            created = True
+
+        return JsonResponse({'status':'success', 'created': created})
 
     # GET request: load all tools
     tools = ToolCreation.objects.all().order_by('-created_at')
     return render(request, 'tool_creation.html', {'tools': tools})
+
+@csrf_exempt
+def tool_delete(request, id):
+    if request.method == 'POST':
+        try:
+            tool = ToolCreation.objects.get(id=id)
+            tool.delete()
+            return JsonResponse({'status':'success'})
+        except ToolCreation.DoesNotExist:
+            return JsonResponse({'status':'error', 'message':'Tool not found'})
+    return JsonResponse({'status':'error','message':'POST required'})
 
 @csrf_exempt
 def tool_purchase_view(request):
@@ -249,6 +358,7 @@ def create_unit(request, station_id):
             incharge=incharge_user,
             remarks=remarks
         )
+        unit.save()
 
         # Check if request is AJAX
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -280,6 +390,7 @@ def create_tray(request, unit_id):
 
         tray = Tray.objects.create(
             unit=unit,
+            unit_code=unit.unit_id,
             tray_name=tray_name,
             remarks=remarks,
             max_capacity=max_capacity if max_capacity else None
@@ -359,6 +470,7 @@ def assign_tools(request, tray_id):
             TrayTool.objects.create(
                 tray=tray,
                 inventory=inventory_item,
+                tool_id=tool.tool_id,
                 assigned_quantity=assign_qty,
                 remarks=remarks,
                 assigned_by=request.user if request.user.is_authenticated else None
@@ -389,7 +501,7 @@ def assigned_tools_list(request, tray_id):
     return render(request, 'assigned_tools_list.html', context)
 
 # views.py
-from django.db.models import Q, F
+from django.db.models import Q, F, Max
 from .models import TrayTool, ServiceStation, Unit, Tray, Inventory
 
 def global_assigned_tools(request):
@@ -455,6 +567,7 @@ def manage_users(request):
     # Debug: print user roles before rendering
     for user in users:
         profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile_info, _ = ProfileInformation.objects.get_or_create(user=user) # user profile information
         group_role = user.groups.first().name if user.groups.exists() else None
 
         if profile.role:
@@ -468,6 +581,17 @@ def manage_users(request):
             user.display_role = group_role.strip()
         else:
             user.display_role = "Not Assigned"
+
+        # Attach personal info from ProfileInformation
+        user.phone = profile_info.phone
+        user.department = profile_info.department
+        user.location = profile_info.location
+        user.employee_id = profile_info.employee_id
+        user.designation = profile_info.designation
+        user.date_of_birth = profile_info.date_of_birth
+        user.address = profile_info.address
+        user.gender = profile_info.gender
+        user.profile_picture = profile_info.profile_picture
 
     if request.method == 'POST':
         user_id = request.POST.get('user_id')
@@ -548,128 +672,165 @@ def user_assigned_list(request):
 
     return render(request, 'user_assigned_list.html', {'users': user_data})
 
-def inventory_update_api(request):
-    latest_event = ToolEventTracking.objects.order_by('timestamp').first()
-    if not latest_event:
-        return JsonResponse({"success": False, "error": "No recent event found"})
-
-    inventory = Inventory.objects.filter(tool__tool_id=latest_event.tool_id).first()
+def update_inventory_for_event(event):
+    inventory = Inventory.objects.filter(tool__tool_id=event.tool_id).first()
     if not inventory:
-        return JsonResponse({"success": False, "error": "Tool not found in inventory"})
+        return {"success": False, "error": "Tool not found in inventory"}
 
     updated = False
-
-    if latest_event.event == "tool_Issued":
-        if inventory.available_quantity > 0:
-            Inventory.objects.filter(pk=inventory.pk).update(
-                in_use=F('in_use') + 1,
-                available_quantity=F('available_quantity') - 1
-            )
-            updated = True
-    elif latest_event.event == "tool_Returned":
-        if inventory.in_use > 0:
-            Inventory.objects.filter(pk=inventory.pk).update(
-                in_use=F('in_use') - 1,
-                available_quantity=F('available_quantity') + 1
-            )
-            updated = True
-    elif latest_event.event == "tool_Damaged":
-        if inventory.available_quantity > 0:
-            Inventory.objects.filter(pk=inventory.pk).update(
-                damaged=F('damaged') + 1,
-                available_quantity=F('available_quantity') - 1
-            )
-            updated = True
+    if event.event == "tool_Issued" and inventory.available_quantity > 0:
+        Inventory.objects.filter(pk=inventory.pk).update(
+            in_use=F('in_use') + 1,
+            available_quantity=F('available_quantity') - 1
+        )
+        updated = True
+    elif event.event == "tool_Returned" and inventory.in_use > 0:
+        Inventory.objects.filter(pk=inventory.pk).update(
+            in_use=F('in_use') - 1,
+            available_quantity=F('available_quantity') + 1
+        )
+        updated = True
+    elif event.event == "tool_Damaged" and inventory.available_quantity > 0:
+        Inventory.objects.filter(pk=inventory.pk).update(
+            damaged=F('damaged') + 1,
+            available_quantity=F('available_quantity') - 1
+        )
+        updated = True
 
     if updated:
         inventory.refresh_from_db()
-        return JsonResponse({
+        return {
             "success": True,
             "tool_id": inventory.tool_id,
             "available_quantity": inventory.available_quantity,
             "in_use": inventory.in_use,
             "damaged": inventory.damaged,
-            "event": latest_event.event,
-            "timestamp": latest_event.timestamp,
-        })
+            "event": event.event,
+            "timestamp": event.timestamp,
+        }
     else:
-        return JsonResponse({
-            "success": False,
-            "error": "No inventory update possible for this event",
-            "tool_id": inventory.tool_id,
-            "event": latest_event.event
-        })
+        return {"success": False, "error": "No inventory update possible"}
+
+def inventory_update_api(request):
+    latest_event = ToolEventTracking.objects.order_by('-timestamp').first()
+    if not latest_event:
+        return JsonResponse({"success": False, "error": "No recent event found"})
+
+    result = update_inventory_for_event(latest_event)
+    return JsonResponse(result)
+
+# Set duplicate thresholds per event type
+# Generic time threshold for duplicate suppression (seconds)
+DUPLICATE_THRESHOLD = 5
 
 # Machine A - Master recevies the client detections
+# Log directory setup
+def get_client_ip(request):
+    """Return the actual client IP address (works behind proxies too)."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
 @csrf_exempt
 def receive_detections(request):
-    if request.method != "POST":
-        return JsonResponse({"detail": "Only POST allowed"}, status=405)
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            now_utc = timezone.now()  # always aware UTC time
 
-    # Simple token auth
-    token = request.headers.get("Authorization")
-    if token != "Bearer MY_SECRET_KEY":
-        return JsonResponse({"detail": "Unauthorized"}, status=401)
+            # If client provided timestamp, parse and make aware
+            client_ts = data.get("timestamp")
+            if client_ts:
+                try:
+                    parsed_ts = datetime.fromisoformat(str(client_ts))
+                    if timezone.is_naive(parsed_ts):
+                        parsed_ts = timezone.make_aware(parsed_ts, timezone.get_current_timezone())
+                except Exception:
+                    parsed_ts = now_utc
+            else:
+                parsed_ts = now_utc
 
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": "Invalid JSON"}, status=400)
+            timestamp = parsed_ts
+            client_ip = get_client_ip(request)
+            event_type = data.get("event")
+            user_name = data.get("user_name") or data.get("username") or data.get("user")
+            tool_name = data.get("tool_name")
+            unit_id = data.get("unit_id")
+            tray_id = data.get("tray_id")
 
-    device_id = data.get("device_id")
-    timestamp = data.get("timestamp") or now()
-    detections = data.get("detections", [])
+            print("Event :",event_type)
 
-    saved = []
-    for d in detections:
-        obj = ToolsTracking.objects.create(
-            device_id=device_id,
-            tool_name=d.get("tool"),
-            confidence=d.get("confidence", 0.0),
-            timestamp=timestamp,
-            frame_id=data.get("frame_id"),
-            meta=data.get("meta", {}),
-        )
-        saved.append(obj.id)
+            is_duplicate = False
 
-    return JsonResponse({"status": "ok", "saved_ids": saved})
+            # ----------------- GENERIC DUPLICATE CHECK -----------------
+            last_event = ToolEventTracking.objects.filter(
+                client_ip=client_ip,
+                event=event_type,
+                user_name=user_name,
+                tool_name=tool_name,
+                unit_id=unit_id,
+                tray_id=tray_id
+            ).order_by('-timestamp').first()
 
+            if last_event:
+                last_time = last_event.timestamp
 
-# Machine B — Detection sender script
-# # send_to_master.py
-# import requests, json, time, socket
-#
-# MASTER_IP = "192.168.1.100"   # Machine A IP
-# API_URL = f"http://{MASTER_IP}:8000/api/detections/"
-# API_KEY = "MY_SECRET_KEY"
-#
-# def send_detection(tool_name, confidence):
-#     payload = {
-#         "device_id": socket.gethostname(),
-#         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-#         "detections": [
-#             {"tool": tool_name, "confidence": confidence}
-#         ],
-#         "frame_id": "frame_001"
-#     }
-#     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-#     try:
-#         r = requests.post(API_URL, headers=headers, data=json.dumps(payload), timeout=5)
-#         print("→ Sent", r.status_code, r.text)
-#     except Exception as e:
-#         print("Send failed:", e)
-#
-# # Example usage
-# send_detection("spanner", 0.97)
+                # Ensure timezone-aware comparison
+                if timezone.is_naive(last_time):
+                    last_time = timezone.make_aware(last_time, timezone.get_current_timezone())
 
-def tools_tracking_list(request):
-    search = request.GET.get("search", "")
-    records = ToolsTracking.objects.all().order_by("-timestamp")
+                time_diff = (timestamp - last_time).total_seconds()
 
-    if search:
-        records = records.filter(tool_name__icontains=search)
+                if time_diff < DUPLICATE_THRESHOLD:
+                    print(
+                        f"[{timestamp}] ⚠️ Duplicate event ignored: {event_type} from {client_ip} (Δ={time_diff:.2f}s)"
+                    )
+                    is_duplicate = True
 
-    return render(request, "tools_tracking_list.html", {
-        "records": records,
-        "search": search
-    })
+            if is_duplicate:
+                return JsonResponse({"status": "ignored"}, status=200)
+            # -----------------------------------------------------------------------------
+
+            hostname = socket.gethostname()
+            server_ip = socket.gethostbyname(hostname)
+
+            # Save event to database
+            event = ToolEventTracking.objects.create(
+                # timestamp=data.get("timestamp", timestamp),
+                timestamp=timestamp,
+                service_station=data.get("service_station"),
+                unit=data.get("unit"),
+                unit_id=data.get("unit_id"),
+                user_id=data.get("user_id"),
+                user_name=data.get("user_name"),
+                event=event_type,
+                tray_id=data.get("tray_id"),
+                tool_id=data.get("tool_id"),
+                tool_name=data.get("tool_name"),
+                device_id=data.get("device_id"),
+                client_ip=client_ip,
+                raw_data=data
+            )
+
+            print(f"[{timestamp}] Event saved: {event.event} from client {client_ip}")
+
+            # 🔁 Update inventory separately
+            inventory_result = update_inventory_for_event(event)
+
+            return JsonResponse({
+                "status": "success",
+                "message": "Event stored successfully",
+                "inventory_update": inventory_result,
+                "server_ip": server_ip,
+                "client_ip": client_ip,
+                "saved_event_id": event.id
+            }, status=201)
+
+        except Exception as e:
+            print("[Error receiving event]:", e)
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+    return JsonResponse({"status": "error", "message": "Only POST allowed"}, status=405)

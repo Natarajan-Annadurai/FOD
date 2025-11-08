@@ -1,6 +1,25 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+class ProfileInformation(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True, null=True)
+    location = models.CharField(max_length=100, blank=True, null=True)
+    employee_id = models.CharField(max_length=50, blank=True, null=True)
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    date_of_birth = models.DateField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    gender = models.CharField(
+        max_length=10,
+        choices=[('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')],
+        blank=True, null=True
+    )
+    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+
+    def __str__(self):
+        return self.user.username
+
 class ToolCreation(models.Model):
     tool_id = models.CharField(max_length=50, unique=True)
     tool_name = models.CharField(max_length=200)
@@ -75,6 +94,7 @@ class ServiceStation(models.Model):
 
 class Unit(models.Model):
     station = models.ForeignKey(ServiceStation, on_delete=models.CASCADE, related_name='units')
+    station_code = models.CharField(max_length=20, blank=True, null=True)
     unit_id = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=100)
     incharge = models.ForeignKey(
@@ -87,6 +107,9 @@ class Unit(models.Model):
             last = Unit.objects.order_by('-id').first()
             next_id = 1 if not last else last.id + 1
             self.unit_id = f"U{next_id:03d}"
+
+        if self.station:
+            self.station_code = self.station.station_id
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -95,6 +118,7 @@ class Unit(models.Model):
 
 class Tray(models.Model):
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, related_name='trays')
+    unit_code = models.CharField(max_length=20, blank=True, null=True)
     tray_id = models.CharField(max_length=20, unique=True, editable=False)
     tray_name = models.CharField(max_length=100)
     max_capacity = models.PositiveIntegerField(blank=True, null=True)
@@ -105,6 +129,9 @@ class Tray(models.Model):
             last = Tray.objects.order_by('-id').first()
             next_id = 1 if not last else last.id + 1
             self.tray_id = f"T{next_id:03d}"
+        # Auto-fill unit_code from related Unit
+        if self.unit and not self.unit_code:
+            self.unit_code = self.unit.unit_id
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -113,6 +140,7 @@ class Tray(models.Model):
 class TrayTool(models.Model):
     tray = models.ForeignKey('Tray', on_delete=models.CASCADE, related_name='tray_tools')
     inventory = models.ForeignKey('Inventory', on_delete=models.CASCADE)
+    tool_id = models.CharField(max_length=100, default="unknown_tool")
     assigned_quantity = models.PositiveIntegerField()
     remarks = models.TextField(blank=True, null=True)
     assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -149,30 +177,23 @@ class ToolEventTracking(models.Model):
         ('tool_Damaged', 'Tool Damaged'),
         ('auto_logout', 'Auto Logout'),
         ('system_offline', 'System Offline'),
+        ('system_online', 'System Online'),
     ]
 
     timestamp = models.DateTimeField()
+    service_station = models.CharField(max_length=100, null=True, blank=True)
+    unit = models.CharField(max_length=100, null=True, blank=True)
+    unit_id = models.IntegerField(null=True, blank=True)
     user_id = models.CharField(max_length=50, null=True, blank=True)
     user_name = models.CharField(max_length=100, null=True, blank=True)
     event = models.CharField(max_length=50, choices=EVENT_CHOICES)
-    tray_id = models.IntegerField(null=True, blank=True)
-
-
-    unit_id = models.IntegerField(null=True, blank=True)
+    tray_id = models.CharField(max_length=50, null=True, blank=True)
     tool_id = models.CharField(max_length=50, null=True, blank=True)
     tool_name = models.CharField(max_length=200, null=True, blank=True)
+    device_id = models.CharField(max_length=100, null=True, blank=True)
+    client_ip = models.GenericIPAddressField(null=True, blank=True)
+    raw_data = models.JSONField(null=True, blank=True)  # Store full original payload
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.event} - {self.tool_name or self.tool_id}"
-
-class ToolsTracking(models.Model):
-    device_id = models.CharField(max_length=100)
-    tool_name = models.CharField(max_length=100)
-    confidence = models.FloatField()
-    timestamp = models.DateTimeField()
-    frame_id = models.CharField(max_length=100, blank=True, null=True)
-    meta = models.JSONField(default=dict, blank=True)
-
-    def __str__(self):
-        return f"{self.device_id} - {self.tool_name} ({self.confidence:.2f})"
+        return f"{self.event} - {self.tool_name or self.tool_id or self.tray_id}"

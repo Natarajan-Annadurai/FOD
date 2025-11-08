@@ -37,10 +37,11 @@
     // Auto-refresh every 5 seconds
     setTimeout(function(){
        window.location.reload();
-    }, 5000);
+    }, 30000);
   </script>
 </head>
 <body class="bg-gray-100 min-h-screen p-6">
+
 
   <!-- Header -->
   <div class="flex flex-col md:flex-row items-center justify-between mb-6 border-b pb-4">
@@ -64,10 +65,10 @@
       <h3 class="text-lg font-semibold text-gray-700 mb-2">Active Users</h3>
       <p class="text-3xl font-bold text-green-600">{{ active_users }}</p>
     </div>
-    <div class="bg-white p-6 rounded-lg shadow summary-card text-center">
+    <a href="{% url 'tools_in_use' %}" class="bg-white p-6 rounded-lg shadow summary-card text-center block hover:bg-indigo-50">
       <h3 class="text-lg font-semibold text-gray-700 mb-2">Tools In Use</h3>
       <p class="text-3xl font-bold text-indigo-600">{{ active_tools }}</p>
-    </div>
+    </a>
     <div class="bg-white p-6 rounded-lg shadow summary-card text-center">
       <h3 class="text-lg font-semibold text-gray-700 mb-2">Total Damaged Tools</h3>
       <p class="text-3xl font-bold text-red-600">{{ damaged_tools }}</p>
@@ -82,6 +83,11 @@
         <tr class="bg-gray-200 text-gray-700">
           <th class="p-2 text-left">User ID</th>
           <th class="p-2 text-left">User</th>
+          <th class="p-2 text-left">Service Station</th>
+          <th class="p-2 text-left">Unit</th>
+          <th class="p-2 text-left">Tray</th>
+          <th class="p-2 text-left">Client IP</th>
+          <th class="p-2 text-left">Device ID</th>
           <th class="p-2 text-left">Tool ID</th>
           <th class="p-2 text-left">Tool</th>
           <th class="p-2 text-left">Event</th>
@@ -93,6 +99,11 @@
         <tr class="border-b">
           <td class="p-2">{{ e.user_id }}</td>
           <td class="p-2 font-medium">{{ e.user_name }}</td>
+          <td class="p-2 font-medium">{{ e.service_station }}</td>
+          <td class="p-2 font-medium">{{ e.unit }}</td>
+          <td class="p-2 font-medium">{{ e.tray_id }}</td>
+          <td class="p-2 font-medium">{{ e.client_ip }}</td>
+          <td class="p-2 font-medium">{{ e.device_id }}</td>
           <td class="p-2">{{ e.tool_id }}</td>
           <td class="p-2 font-medium">{{ e.tool_name }}</td>
           <td class="p-2 font-semibold">
@@ -139,6 +150,12 @@
       <thead>
         <tr class="bg-gray-200 text-gray-700">
           <th class="p-2 text-left">User</th>
+          <th class="p-2 text-left">Tool Returned By</th>
+          <th class="p-2 text-left">Service Station</th>
+          <th class="p-2 text-left">Unit</th>
+          <th class="p-2 text-left">Tray</th>
+          <th class="p-2 text-left">Client IP</th>
+          <th class="p-2 text-left">Device ID</th>
           <th class="p-2 text-left">Tool</th>
           <th class="p-2 text-left">Issued At</th>
           <th class="p-2 text-left">Returned At</th>
@@ -148,7 +165,13 @@
       <tbody>
         {% for d in durations %}
         <tr class="border-b">
-          <td class="p-2 font-medium">{{ d.user_name }}</td>
+          <td class="p-2 font-medium">{{ d.issued_by }}</td>
+          <td class="p-2 font-medium">{{ d.returned_by }}</td>
+          <td class="p-2 font-medium">{{ d.service_station }}</td>
+          <td class="p-2 font-medium">{{ d.unit }}</td>
+          <td class="p-2 font-medium">{{ d.tray_id }}</td>
+          <td class="p-2 font-medium">{{ d.client_ip }}</td>
+          <td class="p-2 font-medium">{{ d.device_id }}</td>
           <td class="p-2 font-medium">{{ d.tool_name }}</td>
           <td class="p-2">{{ d.issued_at|date:"Y-m-d H:i:s" }}</td>
           <td class="p-2">{{ d.returned_at|date:"Y-m-d H:i:s" }}</td>
@@ -178,4 +201,17 @@
     </div>
   </div>
 </body>
+
+<script>
+  // Auto-refresh every 5 seconds
+  function autoRefresh() {
+    setTimeout(function() {
+      window.location.reload();
+    }, 5000); // refresh every 5 seconds
+  }
+
+  // Start refreshing only after DOM is fully loaded
+  document.addEventListener("DOMContentLoaded", autoRefresh);
+</script>
+
 </html>

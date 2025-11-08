@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +9,7 @@
 </head>
 <body class="bg-gray-100 p-6">
 
-<div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+<div class="max-w-9xl mx-auto bg-white p-6 rounded-lg shadow-lg">
   <div class="flex items-center justify-between mb-4 border-b pb-2">
       <h2 class="text-2xl font-semibold mb-4">Manage Users & Roles</h2>
 
@@ -33,7 +34,17 @@
         <th class="py-2 px-4">Username</th>
         <th class="py-2 px-4">Email</th>
         <th class="py-2 px-4">Role</th>
+        <th class="py-2 px-4 text-left">Phone</th>
+        <th class="py-2 px-4 text-left">Department</th>
+        <th class="py-2 px-4 text-left">Location</th>
+        <th class="py-2 px-4 text-left">Emp ID</th>
+        <th class="py-2 px-4 text-left">Designation</th>
+        <th class="py-2 px-4 text-left">DOB</th>
+        <th class="py-2 px-4 text-left">Address</th>
+        <th class="py-2 px-4 text-left">Gender</th>
+        <th class="py-2 px-4 text-left">Profile Picture</th>
         <th class="py-2 px-4 text-center">Action</th>
+
       </tr>
     </thead>
     <tbody>
@@ -47,6 +58,21 @@
           {% else %}
             <span class="text-gray-400">Not Assigned</span>
           {% endif %}
+        </td>
+        <td class="py-2 px-4">{{ user.phone }}</td>
+        <td class="py-2 px-4">{{ user.department }}</td>
+        <td class="py-2 px-4">{{ user.location }}</td>
+        <td class="py-2 px-4">{{ user.employee_id }}</td>
+        <td class="py-2 px-4">{{ user.designation }}</td>
+        <td class="py-2 px-4">{{ user.date_of_birth }}</td>
+        <td class="py-2 px-4">{{ user.address }}</td>
+        <td class="py-2 px-4">{{ user.gender }}</td>
+        <td class="py-2 px-4 text-center">
+                {% if user.profile_picture %}
+                  <img src="{{ user.profile_picture.url }}" alt="Profile Picture" style="width:50px; height:50px;">
+                {% else %}
+                  <img src="{% static 'default_profile.png' %}" alt="Default Profile" style="width:50px; height:50px;">
+                {% endif %}
         </td>
         <td class="py-2 px-4 text-center">
           <button
