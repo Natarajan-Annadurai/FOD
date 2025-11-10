@@ -123,7 +123,8 @@ def tool_activity_dashboard(request):
     }
     return render(request, 'tool_activity_dashboard.html', context)
 
-from django.db.models import Subquery, OuterRef
+from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch
+
 
 def tools_in_use(request):
     # Step 1️⃣: Find latest event timestamp for each tool
@@ -345,39 +346,86 @@ def create_unit(request, station_id):
     station = get_object_or_404(ServiceStation, id=station_id)
     users = User.objects.all()
 
+    # Check if edit parameter is present
+    edit_unit_id = request.GET.get('edit')
+    unit_to_edit = None
+    if edit_unit_id:
+        unit_to_edit = get_object_or_404(Unit, id=edit_unit_id, station=station)
+
+    # Handle POST request
     if request.method == 'POST':
+        unit_id = request.POST.get('unit_id')
         unit_name = request.POST.get('unit_name')
         incharge_id = request.POST.get('incharge')
         remarks = request.POST.get('remarks')
 
         incharge_user = User.objects.filter(id=incharge_id).first() if incharge_id else None
 
-        unit = Unit.objects.create(
-            station=station,
-            name=unit_name,
-            incharge=incharge_user,
-            remarks=remarks
-        )
-        unit.save()
-
-        # Check if request is AJAX
-        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-            return JsonResponse({
-                'status': 'success',
-                'unit_id': unit.id,
-                'unit_name': unit.name
-            })
+        if unit_id:  # Update existing
+            unit = get_object_or_404(Unit, id=unit_id, station=station)
+            unit.name = unit_name
+            unit.incharge = incharge_user
+            unit.remarks = remarks
+            unit.save()
+            messages.success(request, "Unit updated successfully.")
+        else:  # Create new
+            unit = Unit.objects.create(
+                station=station,
+                name=unit_name,
+                incharge=incharge_user,
+                remarks=remarks
+            )
+            messages.success(request, "New unit created successfully.")
 
         return redirect('create_unit', station_id=station.id)
 
-    # GET request - show existing units for the station
+    # Handle GET (show units)
     units = Unit.objects.filter(station=station).order_by('id')
     context = {
         'station': station,
         'users': users,
-        'units': units
+        'units': units,
+        'unit_to_edit': unit_to_edit
     }
     return render(request, 'create_unit.html', context)
+
+
+@login_required
+def delete_unit(request, station_id, unit_id):
+    station = get_object_or_404(ServiceStation, id=station_id)
+    unit = get_object_or_404(Unit, id=unit_id, station=station)
+    unit.delete()
+    messages.success(request, "Unit deleted successfully.")
+    return redirect('create_unit', station_id=station.id)
+
+@login_required
+@csrf_exempt
+def edit_service_station(request, pk):
+    station = get_object_or_404(ServiceStation, pk=pk)
+
+    if request.method == 'POST':
+        data = json.loads(request.body.decode('utf-8'))
+        station.name = data.get('name', station.name)
+        station.location = data.get('location', station.location)
+
+        # Update manager (optional)
+        manager_username = data.get('manager')
+        if manager_username:
+            from django.contrib.auth.models import User
+            manager = User.objects.filter(username=manager_username).first()
+            station.manager = manager
+
+        station.save()
+        return JsonResponse({'status': 'success'})
+
+    return JsonResponse({'status': 'invalid request'})
+
+@login_required
+def delete_service_station(request, pk):
+    station = get_object_or_404(ServiceStation, pk=pk)
+    station.delete()
+    messages.success(request, "Service station deleted successfully.")
+    return redirect('service_station_list')
 
 @login_required
 def create_tray(request, unit_id):
@@ -405,19 +453,67 @@ def create_tray(request, unit_id):
         return redirect('create_tray', unit_id=unit.id)
 
     # GET request - show existing trays
-    trays = Tray.objects.filter(unit=unit).order_by('id')
+    trays = Tray.objects.filter(unit=unit).prefetch_related(
+        Prefetch(
+            'tray_tools',
+            queryset=TrayTool.objects.filter(assigned_quantity__gt=0)
+            .select_related('inventory__tool')
+            .order_by('inventory__tool__tool_name')
+        )
+    ).order_by('id')
+
     context = {
         'unit': unit,
         'trays': trays
     }
     return render(request, 'create_tray.html', context)
 
+@login_required
+def edit_tray(request, tray_id):
+    tray = get_object_or_404(Tray, id=tray_id)
+    unit = tray.unit  # To redirect back after editing
+
+    if request.method == 'POST':
+        tray.tray_name = request.POST.get('tray_name')
+        tray.max_capacity = request.POST.get('max_capacity')
+        tray.remarks = request.POST.get('remarks')
+        tray.save()
+        return redirect('create_tray', unit_id=unit.id)
+
+    # Load existing data
+    trays = Tray.objects.filter(unit=unit).order_by('id')
+    context = {
+        'unit': unit,
+        'trays': trays,
+        'edit_tray': tray  # Pass current tray for form prefill
+    }
+    return render(request, 'create_tray.html', context)
+
+@login_required
+def delete_tray(request, tray_id):
+    tray = get_object_or_404(Tray, id=tray_id)
+    unit_id = tray.unit.id
+    tray.delete()
+    return redirect('create_tray', unit_id=unit_id)
+
+from django.db.models import Q, F, OuterRef, Subquery, IntegerField, Value
+from django.db.models.functions import Coalesce
+
 def assign_tools(request, tray_id):
     tray = get_object_or_404(Tray, id=tray_id)
     search_query = request.GET.get('search', '')
 
-    # Join Inventory with ToolCreation
-    inventory_items = Inventory.objects.select_related('tool').all()
+    # Subquery to fetch existing assigned quantity per inventory item for this tray
+    traytool_subquery = TrayTool.objects.filter(
+        tray=tray,
+        inventory=OuterRef('pk')
+    ).values('assigned_quantity')[:1]
+
+    # Include assigned quantity from TrayTool (default 0 if not assigned)
+    inventory_items = Inventory.objects.select_related('tool').annotate(
+        assigned_in_tray=Coalesce(Subquery(traytool_subquery, output_field=IntegerField()), Value(0)),
+        updated_at_in_tray = Subquery(traytool_subquery.values('updated_at')[:1], output_field=DateTimeField())
+    )
 
     # Apply search filter
     if search_query:
@@ -434,7 +530,6 @@ def assign_tools(request, tray_id):
             if not key.startswith('assign_qty_'):
                 continue
 
-            # Extract string-based inventory_id (e.g., "INV001")
             inventory_id = key.replace('assign_qty_', '').strip()
             if not inventory_id:
                 continue
@@ -444,39 +539,59 @@ def assign_tools(request, tray_id):
             except ValueError:
                 assign_qty = 0
 
-            if assign_qty <= 0:
-                continue
-
             remarks = request.POST.get(f'remarks_{inventory_id}', '').strip()
             inventory_item = get_object_or_404(Inventory, inventory_id=inventory_id)
             tool = inventory_item.tool
 
-            # Validate stock
-            if assign_qty > inventory_item.in_stock:
-                messages.error(
-                    request,
-                    f"Cannot assign {assign_qty} units of {tool.tool_name}. "
-                    f"Only {inventory_item.in_stock} available."
+            existing_record = TrayTool.objects.filter(tray=tray, inventory=inventory_item).first()
+
+            # 🔄 If already assigned → update instead of create
+            if existing_record:
+                # Calculate difference to adjust stock
+                diff = assign_qty - existing_record.assigned_quantity
+                if diff > 0 and diff > inventory_item.in_stock:
+                    messages.error(
+                        request,
+                        f"Cannot increase {tool.tool_name} to {assign_qty}. Only {inventory_item.in_stock} available."
+                    )
+                    continue
+
+                # Adjust inventory stock based on difference
+                inventory_item.in_stock -= diff
+                inventory_item.assigned_quantity += diff
+                inventory_item.available_quantity = inventory_item.assigned_quantity
+                inventory_item.save()
+
+                # Update TrayTool record
+                existing_record.assigned_quantity = assign_qty
+                existing_record.remarks = remarks
+                existing_record.save()
+
+            else:
+                # New assignment
+                if assign_qty > inventory_item.in_stock:
+                    messages.error(
+                        request,
+                        f"Cannot assign {assign_qty} units of {tool.tool_name}. "
+                        f"Only {inventory_item.in_stock} available."
+                    )
+                    continue
+
+                inventory_item.in_stock -= assign_qty
+                inventory_item.assigned_quantity += assign_qty
+                inventory_item.available_quantity = inventory_item.assigned_quantity
+                inventory_item.save()
+
+                TrayTool.objects.create(
+                    tray=tray,
+                    inventory=inventory_item,
+                    tool_id=tool.tool_id,
+                    assigned_quantity=assign_qty,
+                    remarks=remarks,
+                    assigned_by=request.user if request.user.is_authenticated else None
                 )
-                continue  # Skip instead of full redirect
 
-            # Deduct stock
-            inventory_item.in_stock -= assign_qty
-            inventory_item.assigned_quantity += assign_qty
-            inventory_item.available_quantity = inventory_item.assigned_quantity
-            inventory_item.save()
-
-            # Create TrayTool record
-            TrayTool.objects.create(
-                tray=tray,
-                inventory=inventory_item,
-                tool_id=tool.tool_id,
-                assigned_quantity=assign_qty,
-                remarks=remarks,
-                assigned_by=request.user if request.user.is_authenticated else None
-            )
-
-        messages.success(request, "Tools assigned successfully!")
+        messages.success(request, "Tool assignments updated successfully!")
         return redirect('assign_tools', tray_id=tray.id)
 
     context = {
@@ -490,7 +605,7 @@ def assigned_tools_list(request, tray_id):
     assigned_tools = TrayTool.objects.select_related(
         'tray', 'tray__unit', 'tray__unit__station',
         'inventory', 'inventory__tool', 'assigned_by'
-    ).filter(tray_id=tray_id)
+    ).filter(tray_id=tray_id,  assigned_quantity__gt=0 )
 
     context = {
         'assigned_tools': assigned_tools,
@@ -500,7 +615,6 @@ def assigned_tools_list(request, tray_id):
     # Use render to display the template with context
     return render(request, 'assigned_tools_list.html', context)
 
-# views.py
 from django.db.models import Q, F, Max
 from .models import TrayTool, ServiceStation, Unit, Tray, Inventory
 
@@ -519,7 +633,7 @@ def global_assigned_tools(request):
         'inventory',
         'inventory__tool',
         'assigned_by'
-    ).all()
+    ).filter(assigned_quantity__gt=0)
 
     # Apply main filters
     if station_id:

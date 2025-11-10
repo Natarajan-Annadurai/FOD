@@ -46,10 +46,36 @@
         <td class="border px-4 py-2">{{ station.location }}</td>
         <td class="border px-4 py-2">{{ station.manager.username|default:"—" }}</td>
         <td class="border px-4 py-2 text-center">
-          <a href="{% url 'create_unit' station.id %}"
-             class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
-            Add Unit
+          <div class="flex justify-center items-center gap-2 whitespace-nowrap">
+            <!-- Add Unit -->
+            <a href="{% url 'create_unit' station.id %}"
+               class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
+              Add Unit
+            </a>
+
+            <!-- Edit -->
+<!--            <a href="{% url 'edit_service_station' station.id %}"-->
+<!--               class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">-->
+<!--              Edit-->
+<!--            </a>-->
+
+          <a href="#"
+               onclick="openEditModal('{{ station.id }}', '{{ station.name }}', '{{ station.location }}', '{{ station.manager.username|default:'' }}')"
+               class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">
+              Edit
           </a>
+
+
+            <!-- Delete -->
+            <form action="{% url 'delete_service_station' station.id %}" method="post"
+                  onsubmit="return confirm('Are you sure you want to delete this station?');">
+              {% csrf_token %}
+              <button type="submit"
+                      class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">
+                Delete
+              </button>
+            </form>
+          </div>
         </td>
       </tr>
       {% empty %}
@@ -61,6 +87,93 @@
       {% endfor %}
     </tbody>
   </table>
+
+    <!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-800 bg-opacity-50 hidden justify-center items-center z-50">
+  <div class="bg-white rounded-lg shadow-lg w-[450px] p-6">
+    <h2 class="text-xl font-semibold text-gray-700 mb-4">Edit Service Station</h2>
+    <form id="editForm" method="POST">
+      {% csrf_token %}
+      <input type="hidden" id="editStationId" name="station_id">
+
+      <div class="mb-3">
+        <label class="block text-gray-700 text-sm font-medium mb-1">Station Name</label>
+        <input type="text" id="editName" name="name"
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-gray-700 text-sm font-medium mb-1">Location</label>
+        <input type="text" id="editLocation" name="location"
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-gray-700 text-sm font-medium mb-1">Updated By</label>
+        <input type="text" id="editManager" name="manager"
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200">
+      </div>
+
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" onclick="closeModal()"
+                class="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500">
+          Cancel
+        </button>
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Update
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 </div>
 </body>
+<script>
+    function openEditModal(id, name, location, manager) {
+  document.getElementById('editStationId').value = id;
+  document.getElementById('editName').value = name;
+  document.getElementById('editLocation').value = location;
+  document.getElementById('editManager').value = manager;
+  document.getElementById('editModal').classList.remove('hidden');
+  document.getElementById('editModal').classList.add('flex');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.add('hidden');
+  document.getElementById('editModal').classList.remove('flex');
+}
+
+document.getElementById('editForm').addEventListener('submit', function(event) {
+  event.preventDefault();
+
+  const id = document.getElementById('editStationId').value;
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  const formData = {
+    name: document.getElementById('editName').value,
+    location: document.getElementById('editLocation').value,
+    manager: document.getElementById('editManager').value
+  };
+
+  fetch(`/service-station/${id}/edit/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken,
+    },
+    body: JSON.stringify(formData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.status === 'success') {
+      closeModal();
+      location.reload(); // Refresh the table
+    } else {
+      alert('Error updating station');
+    }
+  });
+});
+</script>
+
 </html>

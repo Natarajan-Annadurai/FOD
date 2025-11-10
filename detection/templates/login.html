@@ -2,8 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Login | MySite</title>
+    <title>Login | Tool Management System</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(-45deg, #1f2937, #3b82f6, #1e40af, #111827);
+  background-size: 400% 400%;
+  animation: gradientMove 15s ease infinite;
+}
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.login-container {
+  background-color: rgba(255,255,255,0.9);
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+}
+</style>
     <script>
         function togglePassword() {
             const passField = document.getElementById("password");
@@ -18,9 +41,14 @@
         }
     </script>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white p-8 rounded-2xl shadow-lg w-96">
-        <h2 class="text-2xl font-semibold text-center mb-6">User Login</h2>
+
+<body class="flex items-center justify-center min-h-screen relative">
+    <!-- Background overlay -->
+    <div class="overlay"></div>
+
+    <!-- Login Card -->
+    <div class="login-container bg-white bg-opacity-95 p-8 rounded-2xl shadow-2xl w-96">
+        <h2 class="text-2xl font-semibold text-center mb-6 text-gray-800">🔧 Tool Management Login</h2>
 
         {% if messages %}
             {% for message in messages %}

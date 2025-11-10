@@ -5,88 +5,97 @@
   <title>Inventory Management</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://kit.fontawesome.com/a2d9d5d7f4.js" crossorigin="anonymous"></script>
   <style>
     th {
       cursor: pointer;
       position: sticky;
       top: 0;
-      background-color: #e5e7eb; /* Tailwind gray-200 */
+      background-color: #f3f4f6;
       z-index: 10;
+      white-space: nowrap;
+    }
+    td {
+      word-wrap: break-word;
+      white-space: normal;
+      vertical-align: middle;
+    }
+    tr.fade-highlight {
+      background-color: #d1fae5 !important;
+      transition: background-color 1s ease;
     }
   </style>
-    <script>
-    // Auto-refresh every 5 seconds
-    setTimeout(function(){
-       window.location.reload();
-    }, 5000);
-  </script>
 </head>
-<body class="bg-gray-100">
 
-<div class="w-full max-w-full mt-10 bg-white shadow-lg rounded-lg p-6 overflow-x-auto">
-    <!-- Header and Back Button -->
-    <div class="flex items-center justify-between mb-4 border-b pb-2">
-      <h1 class="text-2xl font-semibold text-gray-700">Inventory Overview</h1>
-      <button type="button"
-              id="backBtn"
-              class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
-              onclick="window.location.href='{% url 'dashboard' %}'">
-        Dashboard
-      </button>
-    </div>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
 
-    <!-- Search Bar -->
-    <div class="mb-4 flex justify-between items-center">
+  <!-- HEADER -->
+  <header class="bg-white shadow-md py-4 px-6 flex justify-between items-center">
+    <h1 class="text-2xl font-bold text-gray-700 flex items-center gap-2">
+      <i class="fas fa-boxes text-green-500"></i>
+      Inventory
+    </h1>
+    <button onclick="window.location.href='{% url 'dashboard' %}'"
+      class="px-4 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition">
+      <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+    </button>
+  </header>
+
+  <!-- MAIN -->
+  <main class="w-[95%] mx-auto mt-8 p-6 bg-white rounded-xl shadow-lg">
+
+    <!-- Search & Info -->
+    <div class="flex flex-wrap justify-between items-center mb-4">
       <input type="text"
              id="searchInput"
-             placeholder="Search by Tool Name, ID, or Location..."
-             class="w-1/3 p-2 border rounded shadow-sm focus:ring focus:ring-blue-200"
+             placeholder="🔍 Search by Tool Name, ID, or Location..."
+             class="w-full sm:w-1/3 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 shadow-sm mb-2 sm:mb-0"
              onkeyup="filterTable()">
     </div>
 
-    <!-- Scrollable Table -->
-    <div class="overflow-x-auto rounded-lg border border-gray-300">
-      <table id="inventoryTable" class="min-w-[1400px] w-full border-collapse text-sm">
-        <thead class="bg-gray-200 text-gray-700">
+    <!-- Responsive Table -->
+    <div class="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <table id="inventoryTable" class="w-full border-collapse table-auto text-sm text-gray-700">
+        <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
           <tr>
-            <th class="px-4 py-2 border" onclick="sortTable(0)">Inventory ID</th>
-            <th class="px-4 py-2 border" onclick="sortTable(1)">Tool ID</th>
-            <th class="px-4 py-2 border" onclick="sortTable(2)">Tool Name</th>
-            <th class="px-4 py-2 border" onclick="sortTable(3)">Brand</th>
-            <th class="px-4 py-2 border" onclick="sortTable(4)">Type</th>
-            <th class="px-4 py-2 border">Description</th>
-            <th class="px-4 py-2 border" onclick="sortTable(6)">Part Number</th>
-            <th class="px-4 py-2 border" onclick="sortTable(7)">Location</th>
-            <th class="px-4 py-2 border">Total Qty</th>
-            <th class="px-4 py-2 border">In Stock</th>
-            <th class="px-4 py-2 border">Assigned</th>
-            <th class="px-4 py-2 border">Available</th>
-            <th class="px-4 py-2 border">In Use</th>
-            <th class="px-4 py-2 border">Damaged</th>
-            <th class="px-4 py-2 border" onclick="sortTable(13)">Last Updated</th>
-            <th class="px-4 py-2 border">Remarks</th>
+            <th class="px-3 py-2 border" onclick="sortTable(0)">Inventory ID</th>
+            <th class="px-3 py-2 border" onclick="sortTable(1)">Tool ID</th>
+            <th class="px-3 py-2 border" onclick="sortTable(2)">Tool Name</th>
+            <th class="px-3 py-2 border" onclick="sortTable(3)">Brand</th>
+            <th class="px-3 py-2 border" onclick="sortTable(4)">Type</th>
+            <th class="px-3 py-2 border">Description</th>
+            <th class="px-3 py-2 border" onclick="sortTable(6)">Part No</th>
+            <th class="px-3 py-2 border" onclick="sortTable(7)">Location</th>
+            <th class="px-3 py-2 border">Total</th>
+            <th class="px-3 py-2 border">In Stock</th>
+            <th class="px-3 py-2 border">Assigned</th>
+            <th class="px-3 py-2 border">Available</th>
+            <th class="px-3 py-2 border">In Use</th>
+            <th class="px-3 py-2 border">Damaged</th>
+            <th class="px-3 py-2 border" onclick="sortTable(13)">Updated</th>
+            <th class="px-3 py-2 border">Remarks</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="divide-y divide-gray-100">
           {% if inventory_data %}
             {% for item in inventory_data %}
             <tr class="hover:bg-blue-50 transition">
-              <td class="border px-4 py-2 text-center">{{ item.inventoryId }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.toolId }}</td>
-              <td class="border px-4 py-2">{{ item.toolName }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.brand }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.toolType }}</td>
-              <td class="border px-4 py-2">{{ item.description }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.partNumber }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.location }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.totalQuantity }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.inStock }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.assignedQuantity }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.availableQuantity }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.inUse }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.damaged }}</td>
-              <td class="border px-4 py-2 text-center">{{ item.lastUpdated }}</td>
-              <td class="border px-4 py-2">{{ item.remarks }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.inventoryId }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.toolId }}</td>
+              <td class="border px-3 py-2 font-medium text-gray-800 break-words">{{ item.toolName }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.brand }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.toolType }}</td>
+              <td class="border px-3 py-2 text-gray-600 break-words">{{ item.description }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.partNumber }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.location }}</td>
+              <td class="border px-3 py-2 text-center font-semibold">{{ item.totalQuantity }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.inStock }}</td>
+              <td class="border px-3 py-2 text-center text-blue-600">{{ item.assignedQuantity }}</td>
+              <td class="border px-3 py-2 text-center text-green-600">{{ item.availableQuantity }}</td>
+              <td class="border px-3 py-2 text-center text-yellow-600">{{ item.inUse }}</td>
+              <td class="border px-3 py-2 text-center text-red-600">{{ item.damaged }}</td>
+              <td class="border px-3 py-2 text-center">{{ item.lastUpdated }}</td>
+              <td class="border px-3 py-2 text-gray-600 break-words">{{ item.remarks }}</td>
             </tr>
             {% endfor %}
           {% else %}
@@ -99,18 +108,33 @@
         </tbody>
       </table>
     </div>
-  </div>
+  </main>
+
   <script>
+    // AJAX Refresh (no full reload)
+    setInterval(() => {
+      fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' }})
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const newDoc = parser.parseFromString(html, 'text/html');
+          const newTbody = newDoc.querySelector('#inventoryTable tbody');
+          document.querySelector('#inventoryTable tbody').innerHTML = newTbody.innerHTML;
+        })
+        .catch(err => console.error("Auto-refresh failed:", err));
+    }, 5000);
+
+    // Table Filter
     function filterTable() {
       const input = document.getElementById("searchInput").value.toLowerCase();
       const rows = document.querySelectorAll("#inventoryTable tbody tr");
-
       rows.forEach(row => {
         const text = row.innerText.toLowerCase();
         row.style.display = text.includes(input) ? "" : "none";
       });
     }
 
+    // Table Sort
     function sortTable(n) {
       const table = document.getElementById("inventoryTable");
       let switching = true, dir = "asc", switchCount = 0;
@@ -122,13 +146,11 @@
           let shouldSwitch = false;
           const x = rows[i].getElementsByTagName("TD")[n];
           const y = rows[i + 1].getElementsByTagName("TD")[n];
-
           if (dir === "asc" && x.innerText.toLowerCase() > y.innerText.toLowerCase()) {
             shouldSwitch = true;
           } else if (dir === "desc" && x.innerText.toLowerCase() < y.innerText.toLowerCase()) {
             shouldSwitch = true;
           }
-
           if (shouldSwitch) {
             rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
             switching = true;
@@ -136,43 +158,12 @@
             break;
           }
         }
-
         if (switchCount === 0 && dir === "asc") {
           dir = "desc";
           switching = true;
         }
       }
     }
-
-    async function checkInventoryUpdate() {
-  try {
-    const response = await fetch("{% url 'inventory_update_api' %}");
-    const data = await response.json();
-
-    if (data.success) {
-      const rows = document.querySelectorAll("#inventoryTable tbody tr");
-      rows.forEach(row => {
-        const toolIdCell = row.cells[1];
-        if (toolIdCell && toolIdCell.textContent.trim() === data.toolId) {
-          // Update quantities
-          row.cells[10].textContent = data.assignedQuantity;
-          row.cells[11].textContent = data.availableQuantity;
-          row.cells[13].textContent = data.damaged;
-
-          // Optional: highlight updated row
-          row.style.backgroundColor = '#d1fae5'; // Tailwind green-100
-          setTimeout(() => row.style.backgroundColor = '', 1500);
-        }
-      });
-      console.log("Inventory updated for:", data.toolId, "Event:", data.event);
-    }
-  } catch (err) {
-    console.error("Update check failed:", err);
-  }
-}
-
-// Poll every 10 seconds
-setInterval(checkInventoryUpdate, 10000);
   </script>
 </body>
 </html>

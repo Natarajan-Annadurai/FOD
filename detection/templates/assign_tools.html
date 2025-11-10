@@ -46,6 +46,8 @@
           <th class="px-3 py-2 border">Tool Type</th>
           <th class="px-3 py-2 border">Available Qty</th>
           <th class="px-3 py-2 border">Assign Qty</th>
+          <th class="px-3 py-2 border">Edit Qty</th>
+          <th class="px-3 py-2 border">Updated At</th>
           <th class="px-3 py-2 border">Remarks</th>
         </tr>
       </thead>
@@ -59,14 +61,27 @@
           <td class="border px-2 py-1">{{ item.tool.brand }}</td>
           <td class="border px-2 py-1">{{ item.tool.tool_type }}</td>
           <td class="border px-2 py-1 text-center">{{ item.in_stock }}</td>
+          <td class="border px-2 py-1 text-center text-blue-600 font-semibold">
+            {{ item.assigned_in_tray }}
+          </td>
           <td class="border px-2 py-1">
             <input type="number" name="assign_qty_{{ item.inventory_id }}" min="0"
-                   max="{{ item.in_stock }}" value="0" placeholder="0"
+                   max="{{ item.in_stock|add:item.assigned_in_tray }}"
+                   value="{{ item.assigned_in_tray }}"
                    class="w-20 border px-1 py-1 rounded">
           </td>
-          <td class="border px-2 py-1">
-            <input type="text" name="remarks_{{ item.inventory_id }}" class="border px-1 py-1 rounded">
+          <td class="border px-2 py-1 text-gray-600 text-sm text-center">
+            {% if item.updated_at_in_tray %}
+              {{ item.updated_at_in_tray|date:"Y-m-d H:i:s" }}
+            {% else %}
+              -
+            {% endif %}
           </td>
+          <td class="border px-2 py-1">
+            <input type="text" name="remarks_{{ item.inventory_id }}"
+                   placeholder="Remarks" class="border px-1 py-1 rounded">
+          </td>
+
         </tr>
         {% empty %}
         <tr>

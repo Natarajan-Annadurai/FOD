@@ -1,89 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard | Object Detection Management System</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <style>
-        /* smooth hover transitions */
-        .card {
-            transition: transform 0.25s ease, box-shadow 0.25s ease;
-        }
-        .card:hover {
-            transform: translateY(-6px) scale(1.03);
-        }
-    </style>
-    <script>
-        function toggleDarkMode() {
-            document.body.classList.toggle('dark');
-        }
-    </script>
+  <meta charset="UTF-8">
+  <title>Dashboard | Object Detection Management System</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* 🚫 disable scroll */
+      height: 100%;
+      width: 100%;
+    }
+
+    body {
+      background: radial-gradient(circle at center, #0f172a 0%, #000 100%);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+    }
+
+    /* floating AI particles */
+    .particle {
+      position: absolute;
+      background: rgba(59,130,246,0.4);
+      border-radius: 50%;
+      animation: floatParticle 12s infinite ease-in-out;
+      opacity: 0.6;
+    }
+
+    @keyframes floatParticle {
+      0% { transform: translateY(0) scale(1); opacity: 0.6; }
+      50% { transform: translateY(-40px) scale(1.2); opacity: 1; }
+      100% { transform: translateY(0) scale(1); opacity: 0.6; }
+    }
+
+    /* radar animation */
+    .radar {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 800px;
+      height: 800px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, rgba(59,130,246,0.4), transparent 70%);
+      animation: spin 6s linear infinite;
+      opacity: 0.2;
+      filter: blur(1px);
+      z-index: 1;
+    }
+
+    @keyframes spin {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    /* glowing grid lines */
+    .grid-lines {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(to right, rgba(59,130,246,0.1) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(59,130,246,0.1) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: moveGrid 15s linear infinite;
+      z-index: 0;
+    }
+
+    @keyframes moveGrid {
+      0% { background-position: 0 0; }
+      100% { background-position: 60px 60px; }
+    }
+
+    /* dashboard cards */
+    .card {
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      position: relative;
+      z-index: 5;
+    }
+    .card:hover {
+      transform: translateY(-6px) scale(1.03);
+    }
+
+    footer, nav {
+      position: relative;
+      z-index: 5;
+    }
+
+    main {
+      flex-grow: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      width: 85%;
+      max-width: 1200px;
+      padding: 1rem;
+    }
+  </style>
+
+  <script>
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark');
+    }
+
+    // generate floating particles dynamically
+    window.onload = function() {
+      for (let i = 0; i < 25; i++) {
+        const particle = document.createElement("div");
+        particle.className = "particle";
+        particle.style.width = particle.style.height = `${Math.random() * 6 + 2}px`;
+        particle.style.left = `${Math.random() * 100}%`;
+        particle.style.top = `${Math.random() * 100}%`;
+        particle.style.animationDuration = `${8 + Math.random() * 8}s`;
+        document.body.appendChild(particle);
+      }
+    };
+  </script>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col transition-colors duration-300">
 
-    <!-- Navbar -->
-    <nav class="bg-blue-600 text-white py-4 shadow-md flex justify-between items-center px-6">
-        <h1 class="text-2xl font-semibold">Object Detection Management</h1>
-        <div class="flex items-center space-x-4">
-            <button onclick="toggleDarkMode()" class="bg-blue-500 hover:bg-blue-700 px-3 py-1 rounded">
-                🌓
-            </button>
-            <span>Welcome, {{ user.username }}</span>
-            <a href="{% url 'logout' %}" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded">Logout</a>
-        </div>
-    </nav>
+<body>
+  <div class="grid-lines"></div>
+  <div class="radar"></div>
 
-    <!-- Dashboard Content -->
-    <main class="flex-grow flex justify-center items-center">
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8 p-6 w-full max-w-6xl">
+  <!-- Navbar -->
+  <nav class="bg-blue-600 text-white py-4 shadow-md flex justify-between items-center px-6 w-full">
+    <h1 class="text-2xl font-semibold">Object Detection Management</h1>
+    <div class="flex items-center space-x-4">
+      <button onclick="toggleDarkMode()" class="bg-blue-500 hover:bg-blue-700 px-3 py-1 rounded">
+        🌓
+      </button>
+      <span>Welcome, {{ user.username }}</span>
+      <a href="{% url 'logout' %}" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded">Logout</a>
+    </div>
+  </nav>
 
-            <!-- Analytics / Information Board -->
-            <a href="#" onclick="window.location.href='{% url 'tool_activity_dashboard' %}'" class="card bg-gradient-to-br from-blue-400 to-indigo-500 text-white shadow-lg rounded-2xl p-6 flex flex-col items-center hover:shadow-blue-400/60">
-                <img src="https://img.icons8.com/ios/100/ffffff/combo-chart.png" class="w-16 mb-3">
-                <h2 class="text-lg font-semibold">Analytics & Information Board</h2>
-                <p class="text-sm mt-2 text-center opacity-90">Visual reports, usage stats, and activity insights.</p>
-            </a>
+  <!-- Dashboard Content -->
+  <main class="flex justify-center items-center p-8">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 justify-items-center">
 
-          <!-- Tool Creation -->
-          <a href="#" onclick="window.location.href='{% url 'tool_creation' %}'" class="card bg-green-800 text-white rounded-2xl p-6 flex flex-col items-center">
-              <img src="https://img.icons8.com/ios/100/ffffff/maintenance.png" class="w-16 mb-3">
-              <h2 class="text-lg font-semibold">Tool Creation</h2>
-              <p class="text-sm mt-2 text-center opacity-90">Add and configure tools used in operations.</p>
-          </a>
+    <!-- Analytics / Information Board -->
+    <a href="{% url 'tool_activity_dashboard' %}"
+       class="card bg-gradient-to-br from-blue-400 to-indigo-500 text-white shadow-lg rounded-2xl w-96 p-8 flex flex-col items-center hover:shadow-blue-400/60 hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios/120/ffffff/combo-chart.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Analytics & Information Board</h2>
+      <p class="text-base mt-3 text-center opacity-90">Visual reports, usage stats, and activity insights.</p>
+    </a>
 
-          <!-- Tool Assignment -->
-          <a href="#" onclick="window.location.href='{% url 'global_assigned_tools' %}'" class="card bg-yellow-800 text-white rounded-2xl p-6 flex flex-col items-center">
-              <img src="https://img.icons8.com/ios-filled/100/ffffff/task.png" class="w-16 mb-3">
-              <h2 class="text-lg font-semibold">Tool Assignment</h2>
-              <p class="text-sm mt-2 text-center opacity-90">Assign tools on service station, unit, trays.</p>
-          </a>
+    <!-- Tool Creation -->
+    <a href="{% url 'tool_creation' %}"
+       class="card bg-green-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios/120/ffffff/maintenance.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Tool Creation</h2>
+      <p class="text-base mt-3 text-center opacity-90">Add and configure tools used in operations.</p>
+    </a>
 
-          <!-- Inventory Management -->
-          <a href="#" onclick="window.location.href='{% url 'inventory' %}'" class="card bg-pink-900 text-white rounded-2xl p-6 flex flex-col items-center">
-                <img src="https://img.icons8.com/ios/100/ffffff/warehouse.png" class="w-16 mb-3">
-                <h2 class="text-lg font-semibold">Inventory Management</h2>
-                <p class="text-sm mt-2 text-center opacity-90">Track and manage stock, materials, and batches.</p>
-          </a>
+    <!-- Tool Assignment -->
+    <a href="{% url 'global_assigned_tools' %}"
+       class="card bg-yellow-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios-filled/120/ffffff/task.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Tool Assignment</h2>
+      <p class="text-base mt-3 text-center opacity-90">Assign tools on service stations, units, trays.</p>
+    </a>
 
-            <!-- Unit Management -->
-            <a href="#" onclick="window.location.href='{% url 'service_station_list' %}'" class="card bg-purple-800 text-white rounded-2xl p-6 flex flex-col items-center">
-                <img src="https://img.icons8.com/ios/100/ffffff/scale.png" class="w-16 mb-3">
-                <h2 class="text-lg font-semibold">Service Station Management</h2>
-                <p class="text-sm mt-2 text-center opacity-90">Manage Service Station</p>
-            </a>
+    <!-- Inventory Management -->
+    <a href="{% url 'inventory' %}"
+       class="card bg-pink-900 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios/120/ffffff/warehouse.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Inventory Management</h2>
+      <p class="text-base mt-3 text-center opacity-90">Track and manage stock, materials, and batches.</p>
+    </a>
 
-            <!-- User Management -->
-            <a href="#" onclick="window.location.href='{% url 'manage_users' %}'" class="card bg-blue-800 text-white rounded-2xl p-6 flex flex-col items-center">
-                <img src="https://img.icons8.com/ios/100/ffffff/scale.png" class="w-16 mb-3">
-                <h2 class="text-lg font-semibold">User Management</h2>
-                <p class="text-sm mt-2 text-center opacity-90">Maintain employee data, roles, and departments.</p>
-            </a>
-        </div>
-    </main>
+    <!-- Service Station Management -->
+    <a href="{% url 'service_station_list' %}"
+       class="card bg-purple-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios/120/ffffff/scale.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Service Station Management</h2>
+      <p class="text-base mt-3 text-center opacity-90">Manage Service Stations.</p>
+    </a>
 
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-gray-300 text-center py-3 text-sm">
-        © {{ now|date:"Y" }} Object Detection Management System. All rights reserved.
-    </footer>
+    <!-- User Management -->
+    <a href="{% url 'manage_users' %}"
+       class="card bg-blue-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios/120/ffffff/conference.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">User Management</h2>
+      <p class="text-base mt-3 text-center opacity-90">Maintain employee data, roles, and departments.</p>
+    </a>
+
+  </div>
+</main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-300 text-center py-3 text-sm w-full">
+    © {{ now|date:"Y" }} Object Detection Management System. All rights reserved.
+  </footer>
 </body>
 </html>
