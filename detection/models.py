@@ -183,7 +183,7 @@ class ToolEventTracking(models.Model):
     timestamp = models.DateTimeField()
     service_station = models.CharField(max_length=100, null=True, blank=True)
     unit = models.CharField(max_length=100, null=True, blank=True)
-    unit_id = models.IntegerField(null=True, blank=True)
+    unit_id = models.CharField(null=True, blank=True)
     user_id = models.CharField(max_length=50, null=True, blank=True)
     user_name = models.CharField(max_length=100, null=True, blank=True)
     event = models.CharField(max_length=50, choices=EVENT_CHOICES)

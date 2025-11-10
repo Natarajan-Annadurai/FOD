@@ -6,6 +6,47 @@
   <title>Tools Currently In Use</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+    <style>
+  /* ====== Fixed Static Background ====== */
+  body {
+    background-color: #3bf0f6; /* fixed blue background */
+    background-attachment: fixed; /* stays in place while scrolling */
+    min-height: 100vh;
+    color: #1f2937; /* default text color */
+  }
+
+  /* ====== Frosted Glass Cards ====== */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  /* ====== Interactive Card Hover ====== */
+  .glass-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+    background: rgba(255, 255, 255, 0.95); /* subtle highlight */
+  }
+
+  /* ====== Table Row Hover ====== */
+  table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    transition: background-color 0.3s ease;
+  }
+
+  table thead {
+    background: rgba(255,255,255,0.8);
+    backdrop-filter: blur(6px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+</style>
 </head>
 <body class="bg-gray-100 min-h-screen p-6">
 

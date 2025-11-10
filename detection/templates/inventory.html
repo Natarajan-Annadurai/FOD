@@ -7,6 +7,14 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <script src="https://kit.fontawesome.com/a2d9d5d7f4.js" crossorigin="anonymous"></script>
   <style>
+    /* ===== Fixed Background ===== */
+    body {
+      background: linear-gradient(135deg, #7e878e 0%, #33678a 100%);
+      background-attachment: fixed;
+      min-height: 100vh;
+      color: #1f2937;
+    }
+
     th {
       cursor: pointer;
       position: sticky;
@@ -15,19 +23,41 @@
       z-index: 10;
       white-space: nowrap;
     }
+
     td {
       word-wrap: break-word;
       white-space: normal;
       vertical-align: middle;
     }
+
     tr.fade-highlight {
       background-color: #d1fae5 !important;
       transition: background-color 1s ease;
     }
+
+    /* ===== Glass Card for Table ===== */
+    main {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      border-radius: 1rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      transition: all 0.3s ease;
+    }
+
+    main:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+
+    /* Table Row Hover */
+    table tbody tr:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+      transition: background-color 0.3s ease;
+    }
   </style>
 </head>
 
-<body class="bg-gray-50 text-gray-800 min-h-screen">
+<body class="text-gray-800 min-h-screen">
 
   <!-- HEADER -->
   <header class="bg-white shadow-md py-4 px-6 flex justify-between items-center">
@@ -42,7 +72,7 @@
   </header>
 
   <!-- MAIN -->
-  <main class="w-[95%] mx-auto mt-8 p-6 bg-white rounded-xl shadow-lg">
+  <main class="w-[95%] mx-auto mt-8 p-6 rounded-xl shadow-lg">
 
     <!-- Search & Info -->
     <div class="flex flex-wrap justify-between items-center mb-4">
