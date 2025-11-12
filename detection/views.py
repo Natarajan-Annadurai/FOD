@@ -5,7 +5,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.utils import timezone
-from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation
+from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Aircraft, JobToolUsage, \
+    JobAuditLog
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
@@ -948,3 +949,331 @@ def receive_detections(request):
             return JsonResponse({"status": "error", "message": str(e)}, status=400)
 
     return JsonResponse({"status": "error", "message": "Only POST allowed"}, status=405)
+
+def aircraft_list(request):
+    if request.method == 'POST':
+        reg_no = request.POST.get('registration_no')
+        model = request.POST.get('model')
+        manufacturer = request.POST.get('manufacturer')
+        airline_name = request.POST.get('airline_name')
+        flight_hours = request.POST.get('flight_hours') or 0
+        flight_cycles = request.POST.get('flight_cycles') or 0
+        remarks = request.POST.get('remarks')
+
+        Aircraft.objects.create(
+            registration_no=reg_no,
+            model=model,
+            manufacturer=manufacturer,
+            airline_name=airline_name,
+            flight_hours=flight_hours,
+            flight_cycles=flight_cycles,
+            remarks=remarks
+        )
+
+        return redirect('aircraft_list')
+
+    aircrafts = Aircraft.objects.all().order_by('-id')
+    return render(request, 'aircraft/aircraft_list.html', {'aircrafts': aircrafts})
+
+#  List all job cards
+def jobcard_list(request):
+    jobcards = JobCard.objects.select_related(
+        'aircraft', 'qa_inspector', 'service_station', 'created_by'
+    ).prefetch_related(
+        'assigned_units', 'assigned_technicians'
+    ).all().order_by('-created_at')
+
+    # Calculate summary counts
+    total_jobcards = jobcards.count()
+    in_progress_count = jobcards.filter(status='IN_PROGRESS').count()
+    completed_count = jobcards.filter(status='COMPLETED').count()
+    high_priority_count = jobcards.filter(priority='HIGH').count()
+
+    context = {
+        'jobcards': jobcards,
+        'total_jobcards': total_jobcards,
+        'in_progress_count': in_progress_count,
+        'completed_count': completed_count,
+        'high_priority_count': high_priority_count,
+    }
+
+    return render(request, 'jobcards/jobcard_list.html', context)
+
+#  Create a new job card
+def jobcard_create(request):
+    aircrafts = Aircraft.objects.all()
+    stations = ServiceStation.objects.all()
+    units = Unit.objects.all()
+    # Get mechanics directly from User model with proper filtering
+    mechanics = User.objects.filter(userprofile__role='Mechanic')
+    qa_users = User.objects.filter(
+        Q(userprofile__role__iexact='Supervisor') |
+        Q(userprofile__role__iexact='Admin') |
+        Q(is_superuser=True)
+    ).distinct()
+
+    if request.method == 'POST':
+        aircraft_id = request.POST.get('aircraft')
+        station_id = request.POST.get('service_station')
+        job_title = request.POST.get('job_title')
+        job_description = request.POST.get('job_description')
+        job_type = request.POST.get('job_type')
+        priority = request.POST.get('priority')
+        bay_id = request.POST.get('bay_id')
+        unit_ids = request.POST.getlist('assigned_units')
+        technician_ids = request.POST.getlist('assigned_technicians')  # This should contain User IDs
+        qa_id = request.POST.get('qa_inspector')
+        reported_issues = request.POST.get('reported_issues')
+
+        aircraft = get_object_or_404(Aircraft, id=aircraft_id)
+        station = get_object_or_404(ServiceStation, id=station_id)
+
+        # Auto-generate Job ID
+        job_id = f"JOB{timezone.now().strftime('%Y%m%d%H%M%S')}"
+
+        job = JobCard.objects.create(
+            job_id=job_id,
+            aircraft=aircraft,
+            service_station=station,
+            job_title=job_title,
+            job_description=job_description,
+            job_type=job_type,
+            priority=priority,
+            status='CREATED',
+            bay_id=bay_id,
+            qa_inspector=User.objects.filter(id=qa_id).first() if qa_id else None,
+            reported_issues=reported_issues,
+            created_by=request.user,
+        )
+
+        # Assign multiple units & technicians
+        job.assigned_units.set(unit_ids)
+
+        # Assign technicians - using User IDs directly
+        if technician_ids:
+            job.assigned_technicians.set(technician_ids)
+        job.save()
+
+        # Better way to print QA Inspector
+        if job.qa_inspector:
+            print(f"QA Inspector: {job.qa_inspector.get_full_name() or job.qa_inspector.username}")
+        else:
+            print("QA Inspector: None")
+
+        # Print assigned units
+        units_list = [f"{u.name} ({u.station.name})" for u in job.assigned_units.all()]
+
+        # Print assigned technicians with better handling
+        tech_list = []
+        for tech in job.assigned_technicians.all():
+            name = tech.get_full_name() or tech.username
+            tech_list.append(name)
+
+        messages.success(request, f"Job Card {job.job_id} created for {aircraft.registration_no}")
+        return redirect('jobcard_detail', job_id=job.job_id)
+
+    context = {
+        'aircrafts': aircrafts,
+        'stations': stations,
+        'units': units,
+        'mechanics': mechanics,  # Now passing User objects directly
+        'qa_users': qa_users,
+    }
+    return render(request, 'jobcards/jobcard_create.html', context)
+
+def jobcard_edit(request, job_id):
+    job = get_object_or_404(JobCard, job_id=job_id)
+    units = Unit.objects.all()
+    mechanics = User.objects.filter(userprofile__role='Mechanic')
+    qa_users = User.objects.filter(
+        Q(userprofile__role__iexact='Supervisor') |
+        Q(userprofile__role__iexact='Admin') |
+        Q(is_superuser=True)
+    ).distinct()
+
+    if request.method == 'POST':
+        job.job_title = request.POST.get('job_title')
+        job.job_description = request.POST.get('job_description')
+        job.job_type = request.POST.get('job_type')
+        job.priority = request.POST.get('priority')
+        job.bay_id = request.POST.get('bay_id')
+        job.reported_issues = request.POST.get('reported_issues')
+
+        # Update QA Inspector
+        qa_id = request.POST.get('qa_inspector')
+        if qa_id:
+            job.qa_inspector = User.objects.filter(id=qa_id).first()
+        else:
+            job.qa_inspector = None
+
+        job.save()
+
+        # Update assigned units
+        unit_ids = request.POST.getlist('assigned_units[]')
+        if unit_ids:
+            job.assigned_units.set(unit_ids)
+        else:
+            job.assigned_units.clear()
+
+        # Update assigned technicians
+        technician_ids = request.POST.getlist('assigned_technicians[]')
+        if technician_ids:
+            job.assigned_technicians.set(technician_ids)
+        else:
+            job.assigned_technicians.clear()
+
+        messages.success(request, f"Job Card {job.job_id} updated successfully")
+        return redirect('jobcard_list')
+
+    context = {
+        'job': job,
+        'units': units,
+        'mechanics': mechanics,
+        'qa_users': qa_users,
+    }
+    return render(request, 'jobcards/jobcard_edit.html', context)
+
+def jobcard_delete(request, job_id):
+    job = get_object_or_404(JobCard, job_id=job_id)
+
+    if request.method == 'POST':
+        job.delete()
+        messages.success(request, f"Job Card {job.job_id} deleted successfully")
+        return redirect('jobcard_list')
+
+    # Optional: If someone accesses via GET, just redirect to list
+    messages.warning(request, "Invalid request method")
+    return redirect('jobcard_list')
+
+#  View JobCard details
+def jobcard_detail(request, job_id):
+    job = get_object_or_404(
+        JobCard.objects.select_related(
+            'created_by', 'qa_inspector', 'service_station', 'aircraft'
+        ).prefetch_related(
+            'assigned_units', 'assigned_technicians'
+        ),
+        job_id=job_id
+    )
+
+    print("QA Inspector:", job.qa_inspector)
+    print("Assigned Technicians:", list(job.assigned_technicians.all()))
+
+    tools = JobToolUsage.objects.filter(job=job)
+
+    missing_tools = tools.filter(status='ISSUED')
+    is_missing = missing_tools.exists()
+
+    context = {
+        'job': job,
+        'tools': tools,
+        'missing_tools': missing_tools,
+        'is_missing': is_missing
+    }
+    return render(request, 'jobcards/jobcard_detail.html', context)
+
+#  Close a JobCard (only if all tools returned)
+def jobcard_close(request, job_id):
+    job = get_object_or_404(JobCard, job_id=job_id)
+    missing_tools = JobToolUsage.objects.filter(job=job, status='ISSUED')
+
+    if missing_tools.exists():
+        messages.error(request, "Cannot close job — some tools are not returned.")
+        return redirect('jobcard_detail', job_id=job.job_id)
+
+    job.status = 'CLOSED'
+    job.completed_at = timezone.now()
+    job.save()
+
+    messages.success(request, f"JobCard {job.job_id} closed successfully.")
+    return redirect('jobcard_list')
+
+@login_required
+def issue_tool(request, job_id, tool_id):
+    job = get_object_or_404(JobCard, pk=job_id)
+    tool = get_object_or_404(ToolCreation, pk=tool_id)
+
+    # Create job-tool usage record
+    JobToolUsage.objects.create(
+        job=job,
+        unit=tool.tray.unit if tool.tray else None,
+        tray=tool.tray,
+        tool=tool,
+        issued_time=timezone.now(),
+        issued_by=request.user,
+        status='ISSUED',
+    )
+
+    # Create audit log
+    JobAuditLog.objects.create(
+        job=job,
+        user=request.user,
+        action="TOOL_ISSUED",
+        details=f"Issued tool {tool.tool_name} (ID: {tool.tool_id})"
+    )
+
+    return redirect('job_detail', job_id=job_id)
+
+@login_required
+def return_tool(request, job_id, tool_usage_id):
+    tool_usage = get_object_or_404(JobToolUsage, pk=tool_usage_id)
+
+    tool_usage.status = 'RETURNED'
+    tool_usage.returned_time = timezone.now()
+    tool_usage.returned_by = request.user
+    tool_usage.save()
+
+    # Audit
+    JobAuditLog.objects.create(
+        job=tool_usage.job,
+        user=request.user,
+        action="TOOL_RETURNED",
+        details=f"Returned tool {tool_usage.tool.tool_name} (ID: {tool_usage.tool.tool_id})"
+    )
+
+    return redirect('job_detail', job_id=job_id)
+
+@login_required
+def close_job(request, job_id):
+    job = get_object_or_404(JobCard, pk=job_id)
+    tool_usages = JobToolUsage.objects.filter(job=job)
+
+    # Find missing tools
+    missing_tools = tool_usages.filter(status='ISSUED')
+
+    if missing_tools.exists():
+        # Mark missing
+        missing_tools.update(status='MISSING')
+        job.status = 'PENDING_RETURN'
+        note = f"Missing tools: {', '.join([t.tool.tool_name for t in missing_tools if t.tool])}"
+    else:
+        job.status = 'CLOSED'
+        note = "All tools returned"
+
+    job.save()
+
+    # Log action
+    JobAuditLog.objects.create(
+        job=job,
+        user=request.user,
+        action="JOB_CLOSED",
+        details=note
+    )
+
+    return redirect('job_detail', job_id=job_id)
+
+from django.shortcuts import render
+
+@login_required
+def job_detail(request, job_id):
+    job = get_object_or_404(JobCard, pk=job_id)
+    tools = JobToolUsage.objects.filter(job=job)
+    missing_tools = tools.filter(status='MISSING')
+    is_missing = missing_tools.exists()
+
+    return render(request, 'job_detail.html', {
+        'job': job,
+        'tools': tools,
+        'missing_tools': missing_tools,
+        'is_missing': is_missing,
+    })

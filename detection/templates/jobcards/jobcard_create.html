@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Job Card</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+  <style>
+    .choices__list--multiple .choices__item {
+      background-color: #3b82f6;
+      border: 1px solid #3b82f6;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+
+  <div class="max-w-6xl mx-auto px-4">
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+      <!-- Header -->
+      <div class="bg-blue-600 text-white p-6">
+        <h1 class="text-2xl font-bold">Create New Job Card</h1>
+      </div>
+
+      <form method="POST" class="p-6 space-y-6">
+        {% csrf_token %}
+
+        <!-- Display messages -->
+        {% if messages %}
+        <div class="mb-4">
+          {% for message in messages %}
+          <div class="p-4 rounded-lg {% if message.tags == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+            {{ message }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Aircraft & Service Details -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 class="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Aircraft & Service Details</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Aircraft -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Aircraft *</label>
+              <select name="aircraft" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                <option value="">-- Select Aircraft --</option>
+                {% for a in aircrafts %}
+                <option value="{{ a.id }}">{{ a.registration_no }} ({{ a.model }})</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Service Station -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Service Station *</label>
+              <select name="service_station" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                <option value="">-- Select Service Station --</option>
+                {% for s in stations %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Job Information -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 class="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Job Information</h3>
+          <div class="grid grid-cols-1 gap-4">
+            <!-- Job Title -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Job Title *</label>
+              <input type="text" name="job_title" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter job title" required>
+            </div>
+
+            <!-- Job Description -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Job Description</label>
+              <textarea name="job_description" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" rows="3" placeholder="Enter detailed description"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Job Type -->
+              <div>
+                <label class="block font-medium mb-1 text-gray-700">Job Type</label>
+                <select name="job_type" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <option value="">-- Select Job Type --</option>
+                  <option value="Routine">Routine</option>
+                  <option value="Repair">Repair</option>
+                  <option value="QA">QA</option>
+                  <option value="Inspection">Inspection</option>
+                  <option value="Modification">Modification</option>
+                </select>
+              </div>
+
+              <!-- Priority -->
+              <div>
+                <label class="block font-medium mb-1 text-gray-700">Priority</label>
+                <select name="priority" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <option value="">-- Select Priority --</option>
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Bay -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Bay / Location</label>
+              <input type="text" name="bay_id" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter Bay ID">
+            </div>
+          </div>
+        </div>
+
+        <!-- Team Assignment -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 class="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Team Assignment</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Units -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Assign Units</label>
+              <select id="units-select" name="assigned_units" multiple>
+                {% for u in units %}
+                <option value="{{ u.id }}">{{ u.name }} ({{ u.station.name }})</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Technicians -->
+            <div>
+              <label class="block font-medium mb-1 text-gray-700">Assign Technicians</label>
+              <select id="technicians-select" name="assigned_technicians" multiple>
+                {% for mech in mechanics %}
+                <option value="{{ mech.id }}">
+                  {{ mech.get_full_name|default:mech.username }}
+                  {% if mech.userprofile.employee_id %}({{ mech.userprofile.employee_id }}){% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- QA Inspector -->
+          <div class="mt-4">
+            <label class="block font-medium mb-1 text-gray-700">QA Inspector</label>
+            <select id="qa-select" name="qa_inspector">
+              <option value=""></option>
+              {% for qa in qa_users %}
+              <option value="{{ qa.id }}">{{ qa.get_full_name|default:qa.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Issues & Notes -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 class="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Issues & Notes</h3>
+          <div>
+            <label class="block font-medium mb-1 text-gray-700">Reported Issues</label>
+            <textarea name="reported_issues" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" rows="3" placeholder="List reported issues"></textarea>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="pt-4 flex flex-col sm:flex-row items-center justify-between border-t border-gray-200">
+          <a href="{% url 'jobcard_list' %}" class="text-gray-600 hover:text-gray-800 hover:underline mb-4 sm:mb-0">
+            ← Back to Job Cards
+          </a>
+          <div class="flex space-x-3">
+            <button type="reset" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+              Reset Form
+            </button>
+            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-medium flex items-center">
+              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Create Job Card
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Include Choices.js -->
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Choices.js for all select elements
+      const unitsSelect = new Choices('#units-select', {
+        removeItemButton: true,
+        searchEnabled: true,
+        placeholder: true,
+        placeholderValue: 'Select units',
+        searchPlaceholderValue: 'Search units...'
+      });
+
+      const techniciansSelect = new Choices('#technicians-select', {
+        removeItemButton: true,
+        searchEnabled: true,
+        placeholder: true,
+        placeholderValue: 'Select technicians',
+        searchPlaceholderValue: 'Search technicians...'
+      });
+
+      const qaSelect = new Choices('#qa-select', {
+        searchEnabled: true,
+        placeholder: true,
+        placeholderValue: 'Select QA inspector',
+        searchPlaceholderValue: 'Search QA...'
+      });
+    });
+  </script>
+</body>
+</html>

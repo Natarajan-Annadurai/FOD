@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Aircraft List</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center py-8">
+
+  <div class="w-full max-w-6xl bg-white shadow-xl rounded-xl p-6" x-data="{ openModal: false }">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold text-blue-700 flex items-center gap-2">
+        ✈️ Aircraft List
+      </h2>
+      <div class="flex items-center gap-3">
+        <button @click="openModal = true"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition">
+          + Add Aircraft
+        </button>
+
+        <button onclick="window.location.href='{% url 'dashboard' %}'"
+                class="px-4 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition flex items-center">
+          🏠 Dashboard
+        </button>
+      </div>
+    </div>
+
+    <!-- Aircraft Table -->
+    <table class="w-full border border-gray-300 rounded-lg overflow-hidden text-sm">
+      <thead class="bg-blue-100 text-blue-900">
+        <tr>
+          <th class="p-2 border">#</th>
+          <th class="p-2 border">Aircraft ID</th>
+          <th class="p-2 border">Registration No</th>
+          <th class="p-2 border">Model</th>
+          <th class="p-2 border">Manufacturer</th>
+          <th class="p-2 border">Airline</th>
+          <th class="p-2 border">Flight Hours</th>
+          <th class="p-2 border">Flight Cycles(Take off & Landing)</th>
+          <th class="p-2 border">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in aircrafts %}
+        <tr class="border-b hover:bg-gray-50 transition">
+          <td class="p-2 text-center">{{ forloop.counter }}</td>
+          <td class="p-2 text-center">{{ a.aircraft_id }}</td>
+          <td class="p-2 text-center">{{ a.registration_no }}</td>
+          <td class="p-2">{{ a.model }}</td>
+          <td class="p-2">{{ a.manufacturer }}</td>
+          <td class="p-2">{{ a.airline_name }}</td>
+          <td class="p-2 text-center">{{ a.flight_hours }}</td>
+          <td class="p-2 text-center">{{ a.flight_cycles }}</td>
+          <td class="p-2">{{ a.remarks }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center py-4 text-gray-500">No aircrafts found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- MODAL FORM -->
+    <div x-show="openModal"
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+         x-transition>
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
+        <button @click="openModal = false"
+                class="absolute top-3 right-3 text-gray-600 hover:text-red-500 text-2xl font-bold">&times;</button>
+
+        <h2 class="text-xl font-semibold text-blue-700 mb-4 text-center">Add New Aircraft</h2>
+
+        <form method="POST" action="{% url 'aircraft_list' %}" class="space-y-4">
+          {% csrf_token %}
+
+          <div>
+            <label class="block font-semibold mb-1">Aircraft ID</label>
+            <input type="text" name="aircraft_id" class="w-full border px-3 py-2 rounded" required>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1">Registration No</label>
+            <input type="text" name="registration_no" class="w-full border px-3 py-2 rounded" required>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1">Model</label>
+            <input type="text" name="model" class="w-full border px-3 py-2 rounded" required>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1">Manufacturer</label>
+            <input type="text" name="manufacturer" class="w-full border px-3 py-2 rounded">
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1">Airline Name</label>
+            <input type="text" name="airline_name" class="w-full border px-3 py-2 rounded">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold mb-1">Flight Hours</label>
+              <input type="number" name="flight_hours" class="w-full border px-3 py-2 rounded" min="0" value="0">
+            </div>
+            <div>
+              <label class="block font-semibold mb-1">Flight Cycles </label>
+              <input type="number" name="flight_cycles" class="w-full border px-3 py-2 rounded" min="0" value="0">
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1">Remarks</label>
+            <textarea name="remarks" class="w-full border px-3 py-2 rounded"></textarea>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-2">
+            <button type="button" @click="openModal = false"
+                    class="px-5 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
+            <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded shadow">
+              Save Aircraft
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

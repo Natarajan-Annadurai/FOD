@@ -233,6 +233,19 @@
           trayDiv.classList.remove("hidden");
           infoText.textContent = "Mechanic can access only assigned station, unit, and tray.";
           infoText.classList.remove("hidden");
+
+          // Automatically tick all trays for mechanics after population
+        setTimeout(() => {
+            populateTrays(
+                Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+                     .filter(cb => cb.checked)
+                     .map(cb => cb.value)
+            );
+
+            trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+                cb.checked = true;
+            });
+        }, 100);
       } else {
           infoText.textContent = "No role assigned yet. Please assign one first.";
           infoText.classList.remove("hidden");
@@ -333,15 +346,25 @@
     populateUnits(selectedStations);
   });
 
-  // Unit change (event delegation)
-  unitContainer.addEventListener("change", (e) => {
-    if (e.target.classList.contains("unit-checkbox")) {
-      const selectedUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-      populateTrays(selectedUnits);
-    }
-  });
+    // Unit change (event delegation)
+    unitContainer.addEventListener("change", (e) => {
+      if (e.target.classList.contains("unit-checkbox")) {
+        const selectedUnits = Array.from(unitContainer.querySelectorAll(".unit-checkbox"))
+          .filter(cb => cb.checked)
+          .map(cb => cb.value);
+
+        // Update tray checkboxes based on selected units
+        populateTrays(selectedUnits);
+
+        // For Mechanic: automatically check all trays from selected units
+        const currentRole = document.getElementById("hiddenRole").value;
+        if (currentRole === "Mechanic") {
+              trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
+                cb.checked = true;
+              });
+             }
+          }
+        });
 
   function populateTrays(selectedUnitIds) {
   // Save currently checked tray IDs

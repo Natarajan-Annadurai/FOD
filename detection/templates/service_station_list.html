@@ -16,10 +16,11 @@
 
     <!-- Buttons container aligned to the right -->
     <div class="flex gap-2">
-      <a href="{% url 'create_service_station' %}"
-         class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
-        + Add Station
-      </a>
+      <button type="button"
+                id="openStationModal"
+                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+          + Add Station
+      </button>
       <a href="{% url 'dashboard' %}"
          class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">
          Dashboard
@@ -52,12 +53,6 @@
                class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
               Add Unit
             </a>
-
-            <!-- Edit -->
-<!--            <a href="{% url 'edit_service_station' station.id %}"-->
-<!--               class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">-->
-<!--              Edit-->
-<!--            </a>-->
 
           <a href="#"
                onclick="openEditModal('{{ station.id }}', '{{ station.name }}', '{{ station.location }}', '{{ station.manager.username|default:'' }}')"
@@ -128,6 +123,43 @@
   </div>
 </div>
 
+    <!-- Station Modal -->
+    <div id="stationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white p-6 rounded-lg w-full max-w-md shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700">Create Service Station</h2>
+
+        <form id="stationForm" method="post" action="{% url 'create_service_station' %}">
+          {% csrf_token %}
+          <label class="block text-gray-700 mb-2">Station Name</label>
+          <input type="text" name="name" required class="border rounded w-full px-3 py-2 mb-3">
+
+          <label class="block text-gray-700 mb-2">Location</label>
+          <input type="text" name="location" class="border rounded w-full px-3 py-2 mb-3">
+
+          <label class="block text-gray-700 mb-2">Manager</label>
+          <select name="manager" class="border rounded w-full px-3 py-2 mb-3">
+            <option value="">Select Manager</option>
+            {% for user in users %}
+              <option value="{{ user.id }}">{{ user.username }}</option>
+            {% endfor %}
+          </select>
+
+          <label class="block text-gray-700 mb-2">Remarks</label>
+          <textarea name="remarks" class="border rounded w-full px-3 py-2 mb-4"></textarea>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" id="closeStationModal"
+                    class="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500">
+              Cancel
+            </button>
+            <button type="submit"
+                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+              Create Station
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 </div>
 </body>
 <script>
@@ -174,6 +206,23 @@ document.getElementById('editForm').addEventListener('submit', function(event) {
     }
   });
 });
+
+  const modal = document.getElementById('stationModal');
+  const openBtn = document.getElementById('openStationModal');
+  const closeBtn = document.getElementById('closeStationModal');
+
+  openBtn.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+  });
+
+  closeBtn.addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+
+  // Optional: Close modal if user clicks outside form
+  window.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.add('hidden');
+  });
 </script>
 
 </html>

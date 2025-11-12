@@ -29,6 +29,22 @@ urlpatterns = [
     path('users/assigned/', views.user_assigned_list, name='user_assigned_list'),
     path('inventory/update/', views.inventory_update_api, name='inventory_update_api'),
     path('api/detections/', views.receive_detections, name='receive_detections'),
+
+    path('aircraft/', views.aircraft_list, name='aircraft_list'),
+
+    path('jobcards/', views.jobcard_list, name='jobcard_list'),
+    path('jobcards/create/', views.jobcard_create, name='jobcard_create'),
+    path('<str:job_id>/edit/', views.jobcard_edit, name='jobcard_edit'),
+    path('<str:job_id>/delete/', views.jobcard_delete, name='jobcard_delete'),
+
+    path('jobcards/<str:job_id>/', views.jobcard_detail, name='jobcard_detail'),
+    path('jobcards/<str:job_id>/close/', views.jobcard_close, name='jobcard_close'),
+
+    path('job/<int:job_id>/', views.job_detail, name='job_detail'),
+    path('job/<int:job_id>/close/', views.close_job, name='jobcard_close'),
+    path('job/<int:job_id>/tool/<int:tool_id>/issue/', views.issue_tool, name='issue_tool'),
+    path('job/<int:job_id>/tool/<int:tool_usage_id>/return/', views.return_tool, name='return_tool'),
+
     path('logout/', views.logout_view, name='logout'),
 ]
 

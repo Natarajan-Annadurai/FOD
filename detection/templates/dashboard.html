@@ -193,10 +193,26 @@
 
     <!-- User Management -->
     <a href="{% url 'manage_users' %}"
-       class="card bg-blue-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      class="card bg-blue-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
       <img src="https://img.icons8.com/ios/120/ffffff/conference.png" class="w-20 mb-4">
       <h2 class="text-xl font-semibold">User Management</h2>
       <p class="text-base mt-3 text-center opacity-90">Maintain employee data, roles, and departments.</p>
+    </a>
+
+    <!-- Aircraft Management -->
+    <a href="{% url 'aircraft_list' %}"
+      class="card bg-yellow-800 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios/120/ffffff/airplane-take-off.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Aircraft Management</h2>
+      <p class="text-base mt-3 text-center opacity-90">Add, view, and manage aircraft details and status.</p>
+    </a>
+
+    <!-- Job Card Management -->
+    <a href="{% url 'jobcard_list' %}"
+       class="card bg-indigo-900 text-white rounded-2xl w-96 p-8 flex flex-col items-center hover:scale-105 transition-transform duration-200">
+      <img src="https://img.icons8.com/ios-filled/100/ffffff/worker-male.png" class="w-20 mb-4">
+      <h2 class="text-xl font-semibold">Job Card Management</h2>
+      <p class="text-base mt-3 text-center opacity-90">Create maintenance jobs, assign technicians and tools.</p>
     </a>
 
   </div>

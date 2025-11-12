@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -197,3 +199,122 @@ class ToolEventTracking(models.Model):
 
     def __str__(self):
         return f"{self.event} - {self.tool_name or self.tool_id or self.tray_id}"
+
+class Aircraft(models.Model):
+    aircraft_id = models.CharField(max_length=20, unique=True)
+    registration_no = models.CharField(max_length=20, unique=True)
+    model = models.CharField(max_length=100)
+    manufacturer = models.CharField(max_length=100)
+    airline_name = models.CharField(max_length=100)
+    flight_hours = models.PositiveIntegerField(default=0)
+    flight_cycles = models.PositiveIntegerField(default=0)
+    remarks = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.registration_no} ({self.model})"
+
+class JobCard(models.Model):
+    STATUS_CHOICES = [
+        ('CREATED', 'Created'),
+        ('ASSIGNED', 'Assigned'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('PENDING_QA', 'Pending QA'),
+        ('CLOSED', 'Closed'),
+        ('ON_HOLD', 'On Hold'),
+    ]
+
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    ]
+
+    job_id = models.CharField(max_length=30, unique=True, editable=False)
+    aircraft = models.ForeignKey('Aircraft', on_delete=models.CASCADE, related_name='jobs')
+    service_station = models.ForeignKey('ServiceStation', on_delete=models.SET_NULL, null=True, related_name='jobs')
+    job_title = models.CharField(max_length=150)
+    job_description = models.TextField(blank=True, null=True)
+    job_type = models.CharField(max_length=100, blank=True, null=True)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='CREATED')
+
+    # Timeline
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    closed_at = models.DateTimeField(blank=True, null=True)
+
+    # Assigned units & technicians
+    assigned_units = models.ManyToManyField('Unit', blank=True, related_name='jobcards')
+    assigned_technicians = models.ManyToManyField(User, blank=True, related_name='technician_jobs')
+
+    # Bay / location
+    bay_id = models.CharField(max_length=30, blank=True, null=True)
+
+    # Maintenance records
+    reported_issues = models.TextField(blank=True, null=True)
+    qa_inspector = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='qa_jobs')
+    qa_approval_status = models.CharField(max_length=20, default='PENDING')
+
+    # Tool verification fields
+    missing_tools_flag = models.BooleanField(default=False)
+    missing_tools_list = models.JSONField(blank=True, null=True)
+    tool_verification_completed = models.BooleanField(default=False)
+
+    # Docs and attachments
+    documents = models.JSONField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_jobs')
+    last_updated = models.DateTimeField(auto_now=True)
+
+    remarks = models.TextField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        """Auto-generate job ID like JOB20251112-001"""
+        if not self.job_id:
+            today_str = timezone.now().strftime("%Y%m%d")
+            last = JobCard.objects.filter(job_id__startswith=f"JOB{today_str}").order_by('-job_id').first()
+            if last:
+                last_num = int(last.job_id.split('-')[-1])
+                self.job_id = f"JOB{today_str}-{last_num + 1:03d}"
+            else:
+                self.job_id = f"JOB{today_str}-001"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.job_id} - {self.job_title} ({self.status})"
+
+class JobToolUsage(models.Model):
+    job = models.ForeignKey('JobCard', on_delete=models.CASCADE, related_name='tool_usages')
+    unit = models.ForeignKey('Unit', on_delete=models.SET_NULL, null=True, related_name='unit_tool_usages')
+    tray = models.ForeignKey('Tray', on_delete=models.SET_NULL, null=True, related_name='tray_tool_usages')
+    tool = models.ForeignKey('ToolCreation', on_delete=models.SET_NULL, null=True, related_name='tool_job_usages')
+
+    issued_time = models.DateTimeField(blank=True, null=True)
+    returned_time = models.DateTimeField(blank=True, null=True)
+
+    status = models.CharField(max_length=20, choices=[
+        ('ISSUED', 'Issued'),
+        ('RETURNED', 'Returned'),
+        ('MISSING', 'Missing'),
+    ], default='ISSUED')
+
+    issued_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tool_issuers')
+    returned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tool_returners')
+
+    remarks = models.TextField(blank=True, null=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.tool.tool_name if self.tool else 'Unknown Tool'} ({self.status})"
+
+class JobAuditLog(models.Model):
+    job = models.ForeignKey('JobCard', on_delete=models.CASCADE, related_name='audit_logs')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=100)
+    details = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"[{self.timestamp}] {self.action}"
