@@ -81,6 +81,7 @@
     <table class="w-full border-collapse table-auto">
       <thead>
         <tr class="bg-gray-200 text-gray-700">
+          <th class="p-2 text-left">Job ID</th>
           <th class="p-2 text-left">User ID</th>
           <th class="p-2 text-left">User</th>
           <th class="p-2 text-left">Service Station</th>
@@ -97,6 +98,7 @@
       <tbody>
         {% for e in events %}
         <tr class="border-b">
+          <td class="p-2 font-bold">{{ e.short_job_id }}</td>
           <td class="p-2">{{ e.user_id }}</td>
           <td class="p-2 font-medium">{{ e.user_name }}</td>
           <td class="p-2 font-medium">{{ e.service_station }}</td>
@@ -149,6 +151,7 @@
     <table class="w-full border-collapse table-auto">
       <thead>
         <tr class="bg-gray-200 text-gray-700">
+          <th class="p-2 text-left">Job ID</th>
           <th class="p-2 text-left">User</th>
           <th class="p-2 text-left">Tool Returned By</th>
           <th class="p-2 text-left">Service Station</th>
@@ -165,6 +168,7 @@
       <tbody>
         {% for d in durations %}
         <tr class="border-b">
+          <td class="p-2 font-bold">{{ d.short_job_id }}</td>
           <td class="p-2 font-medium">{{ d.issued_by }}</td>
           <td class="p-2 font-medium">{{ d.returned_by }}</td>
           <td class="p-2 font-medium">{{ d.service_station }}</td>

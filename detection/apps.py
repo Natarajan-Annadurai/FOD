@@ -16,7 +16,4 @@ class DetectionConfig(AppConfig):
         t = threading.Thread(target=background_task, daemon=True)
         t.start()
 
-    def ready(self):
-        import detection.signals
-
 # python manage.py runserver 192.168.0.113:8000

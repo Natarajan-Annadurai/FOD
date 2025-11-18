@@ -17,6 +17,11 @@ class ProfileInformation(models.Model):
         choices=[('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')],
         blank=True, null=True
     )
+    status = models.CharField(
+        max_length=10,
+        choices=[('ACTIVE', 'Active'), ('INACTIVE', 'Inactive')],
+        default='ACTIVE'
+    )
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
 
     def __str__(self):
@@ -104,6 +109,15 @@ class Unit(models.Model):
     )
     remarks = models.TextField(blank=True, null=True)
 
+    # NEW: Unit status
+    STATUS_CHOICES = [
+        ('AVAILABLE', 'Available'),
+        ('BUSY', 'Busy'),
+        ('MAINTENANCE', 'Under Maintenance'),
+        ('OFFLINE', 'Offline'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
+
     def save(self, *args, **kwargs):
         if not self.unit_id:
             last = Unit.objects.order_by('-id').first()
@@ -115,8 +129,7 @@ class Unit(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.unit_id} - {self.name}"
-
+        return f"{self.unit_id} - {self.name} ({self.status})"
 
 class Tray(models.Model):
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, related_name='trays')
@@ -162,13 +175,22 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, null=True, blank=True)
 
-    # Only store readable names
+    # NEW: Technician availability
+    STATUS_CHOICES = [
+        ('AVAILABLE', 'Available'),
+        ('BUSY', 'Busy'),
+        ('ON_LEAVE', 'On Leave'),
+        ('OFF_DUTY', 'Off Duty'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
+
+    # Display fields
     stations_display = models.TextField(null=True, blank=True)
     units_display = models.TextField(null=True, blank=True)
     trays_display = models.TextField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.role}"
+        return f"{self.user.username} - {self.role} ({self.status})"
 
 class ToolEventTracking(models.Model):
     EVENT_CHOICES = [
@@ -194,6 +216,9 @@ class ToolEventTracking(models.Model):
     tool_name = models.CharField(max_length=200, null=True, blank=True)
     device_id = models.CharField(max_length=100, null=True, blank=True)
     client_ip = models.GenericIPAddressField(null=True, blank=True)
+    job_id = models.CharField(max_length=50, null=True, blank=True)
+    status = models.CharField(max_length=50, null=True, blank=True)
+    verification_completed = models.BooleanField(default=False)
     raw_data = models.JSONField(null=True, blank=True)  # Store full original payload
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -318,3 +343,4 @@ class JobAuditLog(models.Model):
 
     def __str__(self):
         return f"[{self.timestamp}] {self.action}"
+

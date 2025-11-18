@@ -1,11 +1,15 @@
 import json
+import random
 import socket
 from datetime import datetime
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.utils import timezone
-from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Aircraft, JobToolUsage, \
+from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Unit, Aircraft, JobToolUsage, \
     JobAuditLog
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
@@ -13,6 +17,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from .models import ToolEventTracking
 from django.views.decorators.csrf import csrf_exempt
+
 
 @csrf_exempt
 def login_view(request):
@@ -33,6 +38,289 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
+def add_user(request):
+    groups = Group.objects.all()
+
+    if request.method == "POST":
+
+        # AUTH USER FIELDS
+        username = request.POST.get("username").strip()
+        email = request.POST.get("email").strip()
+        password = request.POST.get("password")
+        confirm_password = request.POST.get("confirm_password")
+        first_name = request.POST.get("first_name").strip()
+        last_name = request.POST.get("last_name").strip()
+
+        # PROFILE FIELDS
+        phone = request.POST.get("phone")
+        department = request.POST.get("department")
+        location = request.POST.get("location")
+        employee_id = request.POST.get("employee_id")
+        designation = request.POST.get("designation")
+        date_of_birth = request.POST.get("date_of_birth")
+        address = request.POST.get("address")
+        gender = request.POST.get("gender")
+        profile_picture = request.FILES.get("profile_picture")
+        role_id = request.POST.get("role")
+
+        status = request.POST.get("status", "ACTIVE")
+
+        # -------- VALIDATIONS -------- #
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already exists.")
+            return redirect("add_user")
+
+        if password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+            return redirect("add_user")
+
+        try:
+            validate_password(password)
+        except ValidationError as e:
+            for error in e:
+                messages.error(request, error)
+            return redirect("add_user")
+
+        # -------- CREATE USER -------- #
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        # -------- ASSIGN ROLE (GROUP) -------- #
+        if role_id:
+            group = Group.objects.get(id=role_id)
+            user.groups.add(group)
+
+        # -------- CREATE PROFILE -------- #
+        ProfileInformation.objects.create(
+            user=user,
+            phone=phone,
+            department=department,
+            location=location,
+            employee_id=employee_id,
+            designation=designation,
+            date_of_birth=date_of_birth if date_of_birth else None,
+            address=address,
+            gender=gender,
+            status=status,
+            profile_picture=profile_picture
+        )
+
+        messages.success(request, "User created successfully!")
+        return redirect("manage_users")
+
+    return render(request, "users/add_user.html", {"groups": groups})
+
+def create_role(request):
+    if request.method == "POST":
+        role_name = request.POST.get("role_name")
+
+        if Group.objects.filter(name=role_name).exists():
+            messages.error(request, "Role already exists.")
+        else:
+            Group.objects.create(name=role_name)
+            messages.success(request, "Role created successfully.")
+
+        return redirect("add_user")   # return to your user creation page
+
+    return redirect("add_user")
+
+from django.contrib.auth.models import Group
+
+@login_required
+def manage_users(request):
+    users = User.objects.all().order_by('username')
+    stations = ServiceStation.objects.all()
+    units = Unit.objects.all()
+    trays = Tray.objects.all()
+    groups = Group.objects.all()
+
+    # Debug: print user roles before rendering
+    for user in users:
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile_info, _ = ProfileInformation.objects.get_or_create(user=user) # user profile information
+        group_role = user.groups.first().name if user.groups.exists() else None
+
+        if profile.role:
+            if group_role and profile.role.strip() != group_role.strip():
+                profile.role = group_role.strip()
+                profile.save()
+            user.display_role = profile.role.strip()
+        elif group_role:
+            profile.role = group_role.strip()
+            profile.save()
+            user.display_role = group_role.strip()
+        else:
+            user.display_role = "Not Assigned"
+
+        # Attach personal info from ProfileInformation
+        user.phone = profile_info.phone
+        user.department = profile_info.department
+        user.location = profile_info.location
+        user.employee_id = profile_info.employee_id
+        user.designation = profile_info.designation
+        user.date_of_birth = profile_info.date_of_birth
+        user.address = profile_info.address
+        user.gender = profile_info.gender
+        user.status = profile_info.status
+        user.profile_picture = profile_info.profile_picture
+
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        role = request.POST.get('role').strip() if request.POST.get('role') else None
+        station_ids = request.POST.getlist('stations')
+        unit_ids = request.POST.getlist('units')
+        tray_ids = request.POST.getlist('trays')
+
+        user = get_object_or_404(User, id=user_id)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+
+        # --- Assign access rules and display names ---
+        if role == "Admin":
+            all_stations = ServiceStation.objects.all()
+            all_units = Unit.objects.all()
+            all_trays = Tray.objects.all()
+
+            profile.stations_display = ", ".join([s.name for s in all_stations])
+            profile.units_display = ", ".join([u.name for u in all_units])
+            profile.trays_display = ", ".join([t.tray_name for t in all_trays])
+
+        elif role == "Supervisor":
+            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
+            selected_units = Unit.objects.filter(station_id__in=station_ids)
+            selected_trays = Tray.objects.filter(unit__station_id__in=station_ids)
+
+            profile.stations_display = ", ".join([s.name for s in selected_stations])
+            profile.units_display = ", ".join([u.name for u in selected_units])
+            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
+
+        elif role == "Mechanic":
+            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
+            selected_units = Unit.objects.filter(id__in=unit_ids)
+            selected_trays = Tray.objects.filter(id__in=tray_ids)
+
+            profile.stations_display = ", ".join([s.name for s in selected_stations])
+            profile.units_display = ", ".join([u.name for u in selected_units])
+            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
+
+        # Save IDs as comma-separated strings
+        profile.station_id = ",".join(station_ids) if station_ids else None
+        profile.unit_ids = ",".join(unit_ids) if unit_ids else None
+        profile.tray_id = ",".join(tray_ids) if tray_ids else None
+
+        profile.save()
+
+        # --- Sync Django group ---
+        user.groups.clear()
+        group, _ = Group.objects.get_or_create(name=role)
+        user.groups.add(group)
+        user.save()
+
+        return redirect('manage_users')
+
+    return render(request, 'users/manage_users.html', {
+        'users': users,
+        'groups': groups,
+        'stations': stations,
+        'units': units,
+        'trays': trays,
+    })
+
+@login_required
+def update_user_status(request):
+    if request.method == "POST":
+        user_id = request.POST.get("user_id")
+        status = request.POST.get("status")
+        user = get_object_or_404(User, id=user_id)
+        profile_info, _ = ProfileInformation.objects.get_or_create(user=user)
+        profile_info.status = status
+        profile_info.save()
+        messages.success(request, f"{user.username}'s status updated to {status}.")
+    return redirect('manage_users')
+
+def edit_user(request):
+    if request.method == "POST":
+        user_id = request.POST.get("user_id")
+        user = get_object_or_404(User, pk=user_id)
+        profile = get_object_or_404(ProfileInformation, user=user)
+
+        # ---------- AUTH USER FIELDS ----------
+        email = request.POST.get("email").strip()
+        first_name = request.POST.get("first_name").strip()
+        last_name = request.POST.get("last_name").strip()
+        password = request.POST.get("password")
+        confirm_password = request.POST.get("confirm_password")
+
+        # ---------- PROFILE FIELDS ----------
+        phone = request.POST.get("phone")
+        department = request.POST.get("department")
+        location = request.POST.get("location")
+        employee_id = request.POST.get("employee_id")
+        designation = request.POST.get("designation")
+        date_of_birth = request.POST.get("date_of_birth")
+        address = request.POST.get("address")
+        gender = request.POST.get("gender")
+        profile_picture = request.FILES.get("profile_picture")
+        role_id = request.POST.get("role")
+        status = request.POST.get("status", "ACTIVE")
+
+        # ---------- VALIDATE PASSWORD ----------
+        if password:
+            if password != confirm_password:
+                messages.error(request, "Passwords do not match.")
+                return redirect("manage_users")
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                for error in e:
+                    messages.error(request, error)
+                return redirect("manage_users")
+            user.set_password(password)
+
+        # ---------- UPDATE USER ----------
+        user.email = email
+        user.first_name = first_name
+        user.last_name = last_name
+        user.save()
+
+        # ---------- UPDATE ROLE ----------
+        if role_id:
+            group = Group.objects.get(id=role_id)
+            user.groups.clear()  # remove old roles
+            user.groups.add(group)
+
+        # ---------- UPDATE PROFILE ----------
+        profile.phone = phone
+        profile.department = department
+        profile.location = location
+        profile.employee_id = employee_id
+        profile.designation = designation
+        profile.date_of_birth = date_of_birth if date_of_birth else None
+        profile.address = address
+        profile.gender = gender
+        profile.status = status
+        if profile_picture:
+            profile.profile_picture = profile_picture
+        profile.save()
+
+        messages.success(request, f"User {user.username} updated successfully!")
+        return redirect("manage_users")
+
+    messages.error(request, "Invalid request method.")
+    return redirect("manage_users")
+
+def delete_user(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+    user.delete()
+    messages.success(request, f"User {user.username} deleted successfully!")
+    return redirect("manage_users")
+
 @login_required
 def dashboard(request):
     return render(request, 'dashboard.html')
@@ -40,6 +328,12 @@ def dashboard(request):
 def tool_activity_dashboard(request):
     # All events ordered by latest
     events_list = ToolEventTracking.objects.all().order_by('-timestamp')
+
+    for event in events_list:
+        if event.job_id:
+            event.short_job_id = event.job_id.split(" ")[0]
+        else:
+            event.short_job_id = None
 
     # Pagination for events (25 per page)
     events_paginator = Paginator(events_list, 10)
@@ -63,6 +357,7 @@ def tool_activity_dashboard(request):
             elif event.event == 'tool_Returned' and last_issued:
                 # Calculate duration from last issued to this returned
                 duration = event.timestamp - last_issued.timestamp
+                short_job_id = last_issued.job_id.split(" ")[0] if last_issued.job_id else None
                 durations_list.append({
                     'tool_id': tool_id,
                     'tool_name': last_issued.tool_name,
@@ -76,6 +371,7 @@ def tool_activity_dashboard(request):
                     'issued_at': last_issued.timestamp,
                     'returned_at': event.timestamp,
                     'duration_in_use': duration,
+                    'short_job_id': short_job_id,
                 })
                 last_issued = None
 
@@ -670,105 +966,6 @@ def global_assigned_tools(request):
     }
     return render(request, 'global_assigned_tools.html', context)
 
-from django.contrib.auth.models import Group
-
-@login_required
-def manage_users(request):
-    users = User.objects.all().order_by('username')
-    stations = ServiceStation.objects.all()
-    units = Unit.objects.all()
-    trays = Tray.objects.all()
-
-    # Debug: print user roles before rendering
-    for user in users:
-        profile, _ = UserProfile.objects.get_or_create(user=user)
-        profile_info, _ = ProfileInformation.objects.get_or_create(user=user) # user profile information
-        group_role = user.groups.first().name if user.groups.exists() else None
-
-        if profile.role:
-            if group_role and profile.role.strip() != group_role.strip():
-                profile.role = group_role.strip()
-                profile.save()
-            user.display_role = profile.role.strip()
-        elif group_role:
-            profile.role = group_role.strip()
-            profile.save()
-            user.display_role = group_role.strip()
-        else:
-            user.display_role = "Not Assigned"
-
-        # Attach personal info from ProfileInformation
-        user.phone = profile_info.phone
-        user.department = profile_info.department
-        user.location = profile_info.location
-        user.employee_id = profile_info.employee_id
-        user.designation = profile_info.designation
-        user.date_of_birth = profile_info.date_of_birth
-        user.address = profile_info.address
-        user.gender = profile_info.gender
-        user.profile_picture = profile_info.profile_picture
-
-    if request.method == 'POST':
-        user_id = request.POST.get('user_id')
-        role = request.POST.get('role').strip() if request.POST.get('role') else None
-        station_ids = request.POST.getlist('stations')
-        unit_ids = request.POST.getlist('units')
-        tray_ids = request.POST.getlist('trays')
-
-        user = get_object_or_404(User, id=user_id)
-        profile, _ = UserProfile.objects.get_or_create(user=user)
-        profile.role = role
-
-        # --- Assign access rules and display names ---
-        if role == "Admin":
-            all_stations = ServiceStation.objects.all()
-            all_units = Unit.objects.all()
-            all_trays = Tray.objects.all()
-
-            profile.stations_display = ", ".join([s.name for s in all_stations])
-            profile.units_display = ", ".join([u.name for u in all_units])
-            profile.trays_display = ", ".join([t.tray_name for t in all_trays])
-
-        elif role == "Supervisor":
-            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
-            selected_units = Unit.objects.filter(station_id__in=station_ids)
-            selected_trays = Tray.objects.filter(unit__station_id__in=station_ids)
-
-            profile.stations_display = ", ".join([s.name for s in selected_stations])
-            profile.units_display = ", ".join([u.name for u in selected_units])
-            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
-
-        elif role == "Mechanic":
-            selected_stations = ServiceStation.objects.filter(id__in=station_ids)
-            selected_units = Unit.objects.filter(id__in=unit_ids)
-            selected_trays = Tray.objects.filter(id__in=tray_ids)
-
-            profile.stations_display = ", ".join([s.name for s in selected_stations])
-            profile.units_display = ", ".join([u.name for u in selected_units])
-            profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
-
-        # Save IDs as comma-separated strings
-        profile.station_id = ",".join(station_ids) if station_ids else None
-        profile.unit_ids = ",".join(unit_ids) if unit_ids else None
-        profile.tray_id = ",".join(tray_ids) if tray_ids else None
-
-        profile.save()
-
-        # --- Sync Django group ---
-        user.groups.clear()
-        group, _ = Group.objects.get_or_create(name=role)
-        user.groups.add(group)
-        user.save()
-
-        return redirect('manage_users')
-
-    return render(request, 'manage_users.html', {
-        'users': users,
-        'stations': stations,
-        'units': units,
-        'trays': trays,
-    })
-
 def user_assigned_list(request):
     users = User.objects.all().select_related('userprofile')
 
@@ -870,8 +1067,11 @@ def receive_detections(request):
 
             timestamp = parsed_ts
             client_ip = get_client_ip(request)
+            user_id = data.get("user_id")
             event_type = data.get("event")
             user_name = data.get("user_name") or data.get("username") or data.get("user")
+            job_id = data.get("job_id")
+            tool_id = data.get("tool_id")
             tool_name = data.get("tool_name")
             unit_id = data.get("unit_id")
             tray_id = data.get("tray_id")
@@ -912,6 +1112,31 @@ def receive_detections(request):
             hostname = socket.gethostname()
             server_ip = socket.gethostbyname(hostname)
 
+            # ----------------- Assign job_id, status, verification  only for the jobtoolusage and jobauditlogs table-----------------
+            # Fetch JobCard instance
+            try:
+                job_instance = JobCard.objects.get(job_id=job_id)
+            except JobCard.DoesNotExist:
+                # Optionally create a JobCard if it does not exist
+                job_instance = JobCard.objects.create(job_id=job_id, created_by=user_id)
+
+            # Set status based on event type
+            status_map = {
+                "tray_open": "opened",
+                "tray_close": "closed",
+                "tool_Issued": "issued",
+                "tool_Returned": "returned",
+                "tool_Damaged": "damaged",
+                "auto_logout": "auto_logout",
+                "system_offline":"system_offline",
+                "system_online":"system_online"
+            }
+            status = data.get("status") or status_map.get(event_type, "unknown")
+
+            # Verification completed randomly for now
+            verification_completed = data.get("verification_completed") or (event_type == "tool_Returned")
+            # ------------------------------------------------------
+
             # Save event to database
             event = ToolEventTracking.objects.create(
                 # timestamp=data.get("timestamp", timestamp),
@@ -927,10 +1152,99 @@ def receive_detections(request):
                 tool_name=data.get("tool_name"),
                 device_id=data.get("device_id"),
                 client_ip=client_ip,
+                job_id=job_instance,
+                status=status,
+                verification_completed=verification_completed,
                 raw_data=data
             )
 
             print(f"[{timestamp}] Event saved: {event.event} from client {client_ip}")
+
+            # ----------------- JobToolUsage mapping the unit_id, tray_id, tool_id -----------------
+            # Fetch Unit
+            unit_instance = None
+            if unit_id:
+                try:
+                    unit_instance = Unit.objects.get(unit_id=unit_id)
+                except Unit.DoesNotExist:
+                    pass  # handle as needed
+            # Fetch Tray
+            tray_instance = None
+            if tray_id:
+                try:
+                    tray_instance = Tray.objects.get(tray_id=tray_id)
+                except Tray.DoesNotExist:
+                    pass  # handle as needed
+
+            # Fetch Tool
+            tool_instance = None
+            if tool_id:
+                try:
+                    tool_instance = ToolCreation.objects.get(tool_id=tool_id)
+                except ToolCreation.DoesNotExist:
+                    pass  # handle as needed
+
+            # ----------------- JobToolUsage -----------------
+            try:
+                if event_type == "tool_Issued" and user_id and tool_id:
+                    JobToolUsage.objects.create(
+                        issued_time=timestamp,
+                        status='issued',
+                        issued_by_id=user_id,
+                        job=job_instance,
+                        tool=tool_instance,
+                        tray=tray_instance,
+                        unit=unit_instance,
+                    )
+                    print(f"JobToolUsage created: job={job_instance}, tool={tool_instance}, tray={tray_instance}, unit={unit_instance}")
+                elif event_type == "tool_Returned" and tool_id:
+                    usage = JobToolUsage.objects.filter(
+                        job=job_instance,
+                        tool=tool_instance,
+                        status="issued"
+                    ).order_by('-issued_time').first()
+
+                    if usage:
+                        usage.returned_time = timestamp
+                        usage.status = 'returned'
+                        usage.returned_by_id = user_id
+                        usage.save()
+                        print(f"JobToolUsage updated (returned): {usage.id}, job={job_instance}, tool={tool_instance}")
+
+                elif event_type == "tool_Damaged" and tool_id:
+
+                    usage = JobToolUsage.objects.filter(job=job_instance, tool=tool_instance).first()
+
+                    if usage:
+                        usage.status = "damaged"
+                        usage.save()
+                        print(f"JobToolUsage updated (damaged): {usage.id}, job={job_instance}, tool={tool_instance}")
+            except Exception as e:
+                print("JobToolUsage creation failed:", e)
+
+            # ----------------- JobAuditLog -----------------
+            try:
+                audit_action_map = {
+                    'tool_Issued': 'tool_Issued',
+                    'tool_Returned': 'tool_Returned',
+                    'tool_Damaged': 'tool_Damaged',
+                    'tray_open': 'tray_open',
+                    'tray_close': 'tray_close',
+                    'auto_logout': 'auto_logout',
+                    'system_offline': 'system_offline',
+                    'system_online': 'system_online',
+                }
+
+                JobAuditLog.objects.create(
+                    timestamp=timestamp,
+                    action=audit_action_map.get(event.event, event.event),
+                    details=json.dumps(data),
+                    user_id=user_id,
+                    job=job_instance
+                )
+                print(f"JobAuditLog created:  job={job_instance}, user={user_id}")
+            except Exception as e:
+                print("JobAuditLog creation failed:", e)
 
             # 🔁 Update inventory separately
             inventory_result = update_inventory_for_event(event)
@@ -988,13 +1302,31 @@ def jobcard_list(request):
     in_progress_count = jobcards.filter(status='IN_PROGRESS').count()
     completed_count = jobcards.filter(status='COMPLETED').count()
     high_priority_count = jobcards.filter(priority='HIGH').count()
+    critical_count = jobcards.filter(priority='CRITICAL').count()
+
+    units = Unit.objects.all()
+
+    mechanics = User.objects.filter(
+        userprofile__role='Mechanic',
+        profile__status='ACTIVE'
+    )
+
+    qa_users = User.objects.filter(
+        Q(userprofile__role__iexact='Supervisor') |
+        Q(userprofile__role__iexact='Admin') |
+        Q(is_superuser=True)
+    ).distinct()
 
     context = {
         'jobcards': jobcards,
         'total_jobcards': total_jobcards,
+        'units': units,
+        'mechanics': mechanics,
+        'qa_users': qa_users,
         'in_progress_count': in_progress_count,
         'completed_count': completed_count,
         'high_priority_count': high_priority_count,
+        'critical_count': critical_count,
     }
 
     return render(request, 'jobcards/jobcard_list.html', context)
@@ -1003,9 +1335,14 @@ def jobcard_list(request):
 def jobcard_create(request):
     aircrafts = Aircraft.objects.all()
     stations = ServiceStation.objects.all()
-    units = Unit.objects.all()
-    # Get mechanics directly from User model with proper filtering
-    mechanics = User.objects.filter(userprofile__role='Mechanic')
+    # Only available units
+    units = Unit.objects.filter(status='AVAILABLE')
+    # Only available mechanics
+    mechanics = User.objects.filter(
+        userprofile__role='Mechanic',
+        userprofile__status='AVAILABLE',
+        profile__status='ACTIVE'
+    )
     qa_users = User.objects.filter(
         Q(userprofile__role__iexact='Supervisor') |
         Q(userprofile__role__iexact='Admin') |
@@ -1054,6 +1391,17 @@ def jobcard_create(request):
             job.assigned_technicians.set(technician_ids)
         job.save()
 
+        # Mark selected units as BUSY
+        for unit in job.assigned_units.all():
+            unit.status = "BUSY"
+            unit.save()
+
+        # Mark selected technicians as BUSY
+        for tech in job.assigned_technicians.all():
+            profile = tech.userprofile
+            profile.status = "BUSY"
+            profile.save()
+
         # Better way to print QA Inspector
         if job.qa_inspector:
             print(f"QA Inspector: {job.qa_inspector.get_full_name() or job.qa_inspector.username}")
@@ -1083,8 +1431,20 @@ def jobcard_create(request):
 
 def jobcard_edit(request, job_id):
     job = get_object_or_404(JobCard, job_id=job_id)
-    units = Unit.objects.all()
-    mechanics = User.objects.filter(userprofile__role='Mechanic')
+
+    # Units → Available OR already assigned to this job
+    units = Unit.objects.filter(
+        Q(status="AVAILABLE") |
+        Q(id__in=job.assigned_units.values_list('id', flat=True))
+    )
+
+    mechanics = User.objects.filter(
+        userprofile__role="Mechanic"
+    ).filter(
+        Q(userprofile__status="AVAILABLE") & Q(profile__status='ACTIVE') |
+        Q(id__in=job.assigned_technicians.values_list('id', flat=True))
+    )
+
     qa_users = User.objects.filter(
         Q(userprofile__role__iexact='Supervisor') |
         Q(userprofile__role__iexact='Admin') |
@@ -1110,17 +1470,33 @@ def jobcard_edit(request, job_id):
 
         # Update assigned units
         unit_ids = request.POST.getlist('assigned_units[]')
-        if unit_ids:
-            job.assigned_units.set(unit_ids)
-        else:
-            job.assigned_units.clear()
+        current_unit_ids = set(job.assigned_units.values_list('id', flat=True))
+        new_unit_ids = set(map(int, unit_ids))
+
+        # Assign new units
+        job.assigned_units.set(new_unit_ids)
+
+        # Update unit statuses
+        # Mark newly assigned units as BUSY
+        Unit.objects.filter(id__in=new_unit_ids).update(status="BUSY")
+        # Mark units unassigned from this job as AVAILABLE
+        unassigned_units = current_unit_ids - new_unit_ids
+        Unit.objects.filter(id__in=unassigned_units).update(status="AVAILABLE")
 
         # Update assigned technicians
         technician_ids = request.POST.getlist('assigned_technicians[]')
-        if technician_ids:
-            job.assigned_technicians.set(technician_ids)
-        else:
-            job.assigned_technicians.clear()
+        current_tech_ids = set(job.assigned_technicians.values_list('id', flat=True))
+        new_tech_ids = set(map(int, technician_ids))
+
+        # Assign new technicians
+        job.assigned_technicians.set(new_tech_ids)
+
+        # Update technician statuses
+        # Mark newly assigned as BUSY
+        UserProfile.objects.filter(user_id__in=new_tech_ids).update(status="BUSY")
+        # Mark unassigned as AVAILABLE
+        unassigned_techs = current_tech_ids - new_tech_ids
+        UserProfile.objects.filter(user_id__in=unassigned_techs).update(status="AVAILABLE")
 
         messages.success(request, f"Job Card {job.job_id} updated successfully")
         return redirect('jobcard_list')
@@ -1137,11 +1513,21 @@ def jobcard_delete(request, job_id):
     job = get_object_or_404(JobCard, job_id=job_id)
 
     if request.method == 'POST':
+        # Reset status of all assigned units
+        for unit in job.assigned_units.all():
+            unit.status = 'AVAILABLE'
+            unit.save()
+
+        # Reset status of all assigned technicians
+        for tech in job.assigned_technicians.all():
+            if hasattr(tech, 'userprofile'):
+                tech.userprofile.status = 'AVAILABLE'
+                tech.userprofile.save()
+
         job.delete()
         messages.success(request, f"Job Card {job.job_id} deleted successfully")
         return redirect('jobcard_list')
 
-    # Optional: If someone accesses via GET, just redirect to list
     messages.warning(request, "Invalid request method")
     return redirect('jobcard_list')
 
@@ -1156,10 +1542,8 @@ def jobcard_detail(request, job_id):
         job_id=job_id
     )
 
-    print("QA Inspector:", job.qa_inspector)
-    print("Assigned Technicians:", list(job.assigned_technicians.all()))
-
     tools = JobToolUsage.objects.filter(job=job)
+    audit_logs = JobAuditLog.objects.filter(job=job).order_by('-timestamp')
 
     missing_tools = tools.filter(status='ISSUED')
     is_missing = missing_tools.exists()
@@ -1167,6 +1551,7 @@ def jobcard_detail(request, job_id):
     context = {
         'job': job,
         'tools': tools,
+        'audit_logs': audit_logs,
         'missing_tools': missing_tools,
         'is_missing': is_missing
     }
@@ -1175,105 +1560,34 @@ def jobcard_detail(request, job_id):
 #  Close a JobCard (only if all tools returned)
 def jobcard_close(request, job_id):
     job = get_object_or_404(JobCard, job_id=job_id)
-    missing_tools = JobToolUsage.objects.filter(job=job, status='ISSUED')
 
-    if missing_tools.exists():
-        messages.error(request, "Cannot close job — some tools are not returned.")
-        return redirect('jobcard_detail', job_id=job.job_id)
+    # 1️⃣ Check unreturned tools
+    unreturned_tools = JobToolUsage.objects.filter(job=job, status='issued')
+    if unreturned_tools.exists():
+        messages.error(request, "Cannot close job. Some tools are still issued!")
+        return redirect('jobcard_detail', job_id=job_id)
 
+    # 2️⃣ Close job if all tools returned
     job.status = 'CLOSED'
-    job.completed_at = timezone.now()
     job.save()
 
-    messages.success(request, f"JobCard {job.job_id} closed successfully.")
+    # Release units
+    for unit in job.assigned_units.all():
+        unit.status = "AVAILABLE"
+        unit.save()
+
+    # Release technicians
+    for tech in job.assigned_technicians.all():
+        profile = tech.userprofile
+        profile.status = "AVAILABLE"
+        profile.save()
+
+    # 3️⃣ Optional: log job closure in audit
+    JobAuditLog.objects.create(
+        job=job,
+        action='job_closed',
+        details=f"Job closed by user {request.user.username}",
+        user_id=request.user.id
+    )
+    messages.success(request, "Job closed successfully!")
     return redirect('jobcard_list')
-
-@login_required
-def issue_tool(request, job_id, tool_id):
-    job = get_object_or_404(JobCard, pk=job_id)
-    tool = get_object_or_404(ToolCreation, pk=tool_id)
-
-    # Create job-tool usage record
-    JobToolUsage.objects.create(
-        job=job,
-        unit=tool.tray.unit if tool.tray else None,
-        tray=tool.tray,
-        tool=tool,
-        issued_time=timezone.now(),
-        issued_by=request.user,
-        status='ISSUED',
-    )
-
-    # Create audit log
-    JobAuditLog.objects.create(
-        job=job,
-        user=request.user,
-        action="TOOL_ISSUED",
-        details=f"Issued tool {tool.tool_name} (ID: {tool.tool_id})"
-    )
-
-    return redirect('job_detail', job_id=job_id)
-
-@login_required
-def return_tool(request, job_id, tool_usage_id):
-    tool_usage = get_object_or_404(JobToolUsage, pk=tool_usage_id)
-
-    tool_usage.status = 'RETURNED'
-    tool_usage.returned_time = timezone.now()
-    tool_usage.returned_by = request.user
-    tool_usage.save()
-
-    # Audit
-    JobAuditLog.objects.create(
-        job=tool_usage.job,
-        user=request.user,
-        action="TOOL_RETURNED",
-        details=f"Returned tool {tool_usage.tool.tool_name} (ID: {tool_usage.tool.tool_id})"
-    )
-
-    return redirect('job_detail', job_id=job_id)
-
-@login_required
-def close_job(request, job_id):
-    job = get_object_or_404(JobCard, pk=job_id)
-    tool_usages = JobToolUsage.objects.filter(job=job)
-
-    # Find missing tools
-    missing_tools = tool_usages.filter(status='ISSUED')
-
-    if missing_tools.exists():
-        # Mark missing
-        missing_tools.update(status='MISSING')
-        job.status = 'PENDING_RETURN'
-        note = f"Missing tools: {', '.join([t.tool.tool_name for t in missing_tools if t.tool])}"
-    else:
-        job.status = 'CLOSED'
-        note = "All tools returned"
-
-    job.save()
-
-    # Log action
-    JobAuditLog.objects.create(
-        job=job,
-        user=request.user,
-        action="JOB_CLOSED",
-        details=note
-    )
-
-    return redirect('job_detail', job_id=job_id)
-
-from django.shortcuts import render
-
-@login_required
-def job_detail(request, job_id):
-    job = get_object_or_404(JobCard, pk=job_id)
-    tools = JobToolUsage.objects.filter(job=job)
-    missing_tools = tools.filter(status='MISSING')
-    is_missing = missing_tools.exists()
-
-    return render(request, 'job_detail.html', {
-        'job': job,
-        'tools': tools,
-        'missing_tools': missing_tools,
-        'is_missing': is_missing,
-    })

@@ -41,7 +41,7 @@
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
-  <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-8xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
     <!-- Header -->
     <div class="bg-white rounded-xl card-shadow overflow-hidden mb-6">
       <div class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6">
@@ -143,6 +143,18 @@
         </div>
       </div>
 
+<!--        <div class="bg-white rounded-lg card-shadow p-4">-->
+<!--        <div class="flex items-center">-->
+<!--          <div class="p-3 rounded-full bg-red-100 text-red-600 mr-4">-->
+<!--            <i class="fas fa-exclamation-triangle text-xl"></i>-->
+<!--          </div>-->
+<!--          <div>-->
+<!--            <p class="text-sm text-gray-500">Critical Priority</p>-->
+<!--            <p class="text-2xl font-bold">{{ critical_count }}</p>-->
+<!--          </div>-->
+<!--        </div>-->
+<!--      </div>-->
+
       <div class="bg-white rounded-lg card-shadow p-4">
         <div class="flex items-center">
           <div class="p-3 rounded-full bg-green-100 text-green-600 mr-4">
@@ -169,6 +181,7 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Units</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Station</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QA Inspector</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timeline</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -267,7 +280,6 @@
                   </div>
               </td>
 
-
               <td class="px-4 py-4">
                   <div class="text-sm text-gray-900">
                     {% if job.service_station %}
@@ -277,6 +289,15 @@
                     {% endif %}
                   </div>
               </td>
+                <td class="px-4 py-4 whitespace-nowrap">
+                  <div class="text-sm text-gray-900">
+                    {% if job.qa_inspector %}
+                      {{ job.qa_inspector.get_full_name|default:job.qa_inspector.username }}
+                    {% else %}
+                      <span class="text-gray-400 italic">Not Assigned</span>
+                    {% endif %}
+                  </div>
+                </td>
               <td class="px-4 py-4 whitespace-nowrap">
                 <div class="text-sm text-gray-900">Created: {{ job.created_at|date:"M d, Y" }}</div>
                 {% if job.started_at %}
@@ -302,105 +323,147 @@
             </tr>
 
             <!-- Modal HTML for editing a Job Card -->
-            <div id="editModal-{{ job.job_id }}" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-              <div class="bg-white rounded-lg w-11/12 md:w-96 p-6 max-h-[90vh] overflow-y-auto">
-                <h2 class="text-lg font-bold mb-4">Edit Job Card - {{ job.job_id }}</h2>
-                <form method="POST" action="{% url 'jobcard_edit' job.job_id %}">
-                  {% csrf_token %}
+<div id="editModal-{{ job.job_id }}" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-2">
+  <div class="bg-white rounded-lg w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto">
+    <h2 class="text-lg font-bold mb-4">Edit Job Card - {{ job.job_id }}</h2>
+    <form method="POST" action="{% url 'jobcard_edit' job.job_id %}">
+      {% csrf_token %}
 
-                  <!-- Job Title -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">Job Title</label>
-                    <input type="text" name="job_title" value="{{ job.job_title }}" class="border p-2 w-full rounded">
-                  </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Left Column -->
+        <div class="space-y-4">
+          <!-- Job Title & Description -->
+          <div class="bg-gray-50 p-3 rounded-md">
+            <h4 class="font-medium text-gray-700 mb-2 border-b pb-1">Job Details</h4>
 
-                  <!-- Job Description -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">Job Description</label>
-                    <textarea name="job_description" class="border p-2 w-full rounded">{{ job.job_description }}</textarea>
-                  </div>
+            <div class="mb-3">
+              <label class="block text-sm font-medium">Job Title</label>
+              <input type="text" name="job_title" value="{{ job.job_title }}" class="border p-2 w-full rounded text-sm">
+            </div>
 
-                  <!-- Job Type & Priority -->
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                    <div>
-                      <label class="block text-sm font-medium">Job Type</label>
-                      <select name="job_type" class="border p-2 w-full rounded">
-                        <option value="">-- Select Job Type --</option>
-                        <option value="Routine" {% if job.job_type == "Routine" %}selected{% endif %}>Routine</option>
-                        <option value="Repair" {% if job.job_type == "Repair" %}selected{% endif %}>Repair</option>
-                        <option value="QA" {% if job.job_type == "QA" %}selected{% endif %}>QA</option>
-                        <option value="Inspection" {% if job.job_type == "Inspection" %}selected{% endif %}>Inspection</option>
-                        <option value="Modification" {% if job.job_type == "Modification" %}selected{% endif %}>Modification</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="block text-sm font-medium">Priority</label>
-                      <select name="priority" class="border p-2 w-full rounded">
-                        <option value="">-- Select Priority --</option>
-                        <option value="LOW" {% if job.priority == "LOW" %}selected{% endif %}>LOW</option>
-                        <option value="MEDIUM" {% if job.priority == "MEDIUM" %}selected{% endif %}>MEDIUM</option>
-                        <option value="HIGH" {% if job.priority == "HIGH" %}selected{% endif %}>HIGH</option>
-                        <option value="CRITICAL" {% if job.priority == "CRITICAL" %}selected{% endif %}>CRITICAL</option>
-                      </select>
-                    </div>
-                  </div>
+            <div class="mb-3">
+              <label class="block text-sm font-medium">Job Description</label>
+              <textarea name="job_description" class="border p-2 w-full rounded text-sm" rows="3">{{ job.job_description }}</textarea>
+            </div>
+          </div>
 
-                  <!-- Bay / Location -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">Bay / Location</label>
-                    <input type="text" name="bay_id" value="{{ job.bay_id }}" class="border p-2 w-full rounded">
-                  </div>
+          <!-- Job Type & Priority -->
+          <div class="bg-gray-50 p-3 rounded-md">
+            <h4 class="font-medium text-gray-700 mb-2 border-b pb-1">Classification</h4>
 
-                  <!-- Team Assignment -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">Assign Units</label>
-                    <select id="units-select-{{ job.job_id }}" name="assigned_units[]" multiple>
-                      {% for u in units %}
-                      <option value="{{ u.id }}" {% if u in job.assigned_units.all %}selected{% endif %}>
-                        {{ u.name }} ({{ u.station.name }})
-                      </option>
-                      {% endfor %}
-                    </select>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">Assign Technicians</label>
-                    <select id="technicians-select-{{ job.job_id }}" name="assigned_technicians[]" multiple>
-                      {% for mech in mechanics %}
-                      <option value="{{ mech.id }}" {% if mech in job.assigned_technicians.all %}selected{% endif %}>
-                        {{ mech.get_full_name|default:mech.username }}
-                      </option>
-                      {% endfor %}
-                    </select>
-                  </div>
-
-                  <!-- QA Inspector -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">QA Inspector</label>
-                    <select id="qa-select-{{ job.job_id }}" name="qa_inspector">
-                      <option value=""></option>
-                      {% for qa in qa_users %}
-                      <option value="{{ qa.id }}" {% if qa == job.qa_inspector %}selected{% endif %}>
-                        {{ qa.get_full_name|default:qa.username }}
-                      </option>
-                      {% endfor %}
-                    </select>
-                  </div>
-
-                  <!-- Reported Issues -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium">Reported Issues</label>
-                    <textarea name="reported_issues" class="border p-2 w-full rounded">{{ job.reported_issues }}</textarea>
-                  </div>
-
-                  <!-- Buttons -->
-                  <div class="flex justify-end space-x-2 mt-4">
-                    <button type="button" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400" onclick="closeEditModal('{{ job.job_id }}')">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Save</button>
-                  </div>
-                </form>
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="block text-sm font-medium">Job Type</label>
+                <select name="job_type" class="border p-2 w-full rounded text-sm">
+                  <option value="">-- Select Job Type --</option>
+                  <option value="Routine" {% if job.job_type == "Routine" %}selected{% endif %}>Routine</option>
+                  <option value="Repair" {% if job.job_type == "Repair" %}selected{% endif %}>Repair</option>
+                  <option value="QA" {% if job.job_type == "QA" %}selected{% endif %}>QA</option>
+                  <option value="Inspection" {% if job.job_type == "Inspection" %}selected{% endif %}>Inspection</option>
+                  <option value="Modification" {% if job.job_type == "Modification" %}selected{% endif %}>Modification</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium">Priority</label>
+                <select name="priority" class="border p-2 w-full rounded text-sm">
+                  <option value="">-- Select Priority --</option>
+                  <option value="LOW" {% if job.priority == "LOW" %}selected{% endif %}>LOW</option>
+                  <option value="MEDIUM" {% if job.priority == "MEDIUM" %}selected{% endif %}>MEDIUM</option>
+                  <option value="HIGH" {% if job.priority == "HIGH" %}selected{% endif %}>HIGH</option>
+                  <option value="CRITICAL" {% if job.priority == "CRITICAL" %}selected{% endif %}>CRITICAL</option>
+                </select>
               </div>
             </div>
+          </div>
+
+          <!-- Bay / Location -->
+          <div class="bg-gray-50 p-3 rounded-md">
+            <h4 class="font-medium text-gray-700 mb-2 border-b pb-1">Location</h4>
+
+            <div class="mb-3">
+              <label class="block text-sm font-medium">Bay / Location</label>
+              <input type="text" name="bay_id" value="{{ job.bay_id }}" class="border p-2 w-full rounded text-sm">
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-4">
+          <!-- Team Assignment -->
+          <div class="bg-gray-50 p-3 rounded-md">
+            <h4 class="font-medium text-gray-700 mb-2 border-b pb-1">Team Assignment</h4>
+
+            <div class="mb-3">
+              <label class="block text-sm font-medium mb-1">Assign Units</label>
+              <div class="max-h-32 overflow-y-auto border p-2 rounded bg-white">
+                {% for u in units %}
+                <div class="flex items-center mb-1">
+                  <input type="checkbox" name="assigned_units[]" value="{{ u.id }}" id="unit-{{ u.id }}-{{ job.job_id }}"
+                         {% if u in job.assigned_units.all %}checked{% endif %}
+                         class="mr-2">
+                  <label for="unit-{{ u.id }}-{{ job.job_id }}" class="text-sm">
+                    {{ u.name }} ({{ u.station.name }}) - {{ u.status }}
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Assign Technicians -->
+            <div class="mb-3">
+              <label class="block text-sm font-medium mb-1">Assign Technicians</label>
+              <div class="max-h-32 overflow-y-auto border p-2 rounded bg-white">
+                {% for mech in mechanics %}
+                <div class="flex items-center mb-1">
+                  <input type="checkbox" name="assigned_technicians[]" value="{{ mech.id }}" id="tech-{{ mech.id }}-{{ job.job_id }}"
+                         {% if mech in job.assigned_technicians.all %}checked{% endif %}
+                         class="mr-2">
+                  <label for="tech-{{ mech.id }}-{{ job.job_id }}" class="text-sm">
+                    {{ mech.get_full_name|default:mech.username }} - {{ mech.userprofile.status }}
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <!-- QA Inspector -->
+          <div class="bg-gray-50 p-3 rounded-md">
+            <h4 class="font-medium text-gray-700 mb-2 border-b pb-1">Quality Assurance</h4>
+
+            <div class="mb-3">
+              <label class="block text-sm font-medium">QA Inspector</label>
+              <select id="qa-select-{{ job.job_id }}" name="qa_inspector" class="border p-2 w-full rounded text-sm">
+                  <option value=""></option>
+                  {% for qa in qa_users %}
+                  <option value="{{ qa.id }}" {% if qa == job.qa_inspector %}selected{% endif %}>
+                      {{ qa.get_full_name|default:qa.username }}
+                  </option>
+                  {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Reported Issues -->
+          <div class="bg-gray-50 p-3 rounded-md">
+            <h4 class="font-medium text-gray-700 mb-2 border-b pb-1">Issues</h4>
+
+            <div class="mb-3">
+              <label class="block text-sm font-medium">Reported Issues</label>
+              <textarea name="reported_issues" class="border p-2 w-full rounded text-sm" rows="3">{{ job.reported_issues }}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex justify-end space-x-2 mt-6 pt-4 border-t">
+        <button type="button" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 text-sm" onclick="closeEditModal('{{ job.job_id }}')">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
 
             {% empty %}
             <tr>
@@ -575,6 +638,14 @@
       });
     });
 
+    document.addEventListener('DOMContentLoaded', function() {
+      {% for job in jobcards %}
+      new Choices('#units-select-{{ job.job_id }}', { removeItemButton: true, searchEnabled: true });
+      new Choices('#technicians-select-{{ job.job_id }}', { removeItemButton: true, searchEnabled: true });
+      new Choices('#qa-select-{{ job.job_id }}', { searchEnabled: true });
+      {% endfor %}
+    });
+
     function openEditModal(jobId) {
         document.getElementById('editModal-' + jobId).classList.remove('hidden');
         document.getElementById('editModal-' + jobId).classList.add('flex');
@@ -611,7 +682,7 @@
       document.getElementById('unit-preview-' + jobId).classList.remove('hidden');
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', function() {
   const searchInput = document.querySelector('input[type="text"]');
   const tableRows = document.querySelectorAll('tbody tr');
   const mobileCards = document.querySelectorAll('.mobile-card > div');
@@ -620,57 +691,53 @@
   const filterBtn = document.getElementById('filter-btn');
   const resetBtn = document.getElementById('reset-btn');
 
-  function applyFilters() {
-    const searchTerm = searchInput.value.toLowerCase();
-    const statusVal = statusFilter.value;
-    const priorityVal = priorityFilter.value;
+      function applyFilters() {
+      const searchTerm = searchInput.value.toLowerCase();
+      const statusVal = statusFilter.value.toLowerCase();
+      const priorityVal = priorityFilter.value.toLowerCase();
 
-    tableRows.forEach(row => {
-      const text = row.textContent.toLowerCase();
-      const rowStatus = row.querySelector('td:nth-child(4) span')?.textContent || '';
-      const rowPriority = row.querySelector('td:nth-child(3) span')?.textContent || '';
+      // Desktop rows
+      tableRows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const statusMatch = statusVal === '' || text.includes(statusVal);
+        const priorityMatch = priorityVal === '' || text.includes(priorityVal);
+        const searchMatch = searchTerm === '' || text.includes(searchTerm);
 
-      if (
-        text.includes(searchTerm) &&
-        (statusVal === '' || rowStatus === statusVal) &&
-        (priorityVal === '' || rowPriority === priorityVal)
-      ) {
-        row.style.display = '';
-      } else {
-        row.style.display = 'none';
-      }
+        if (statusMatch && priorityMatch && searchMatch) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // Mobile cards
+      mobileCards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        const statusMatch = statusVal === '' || text.includes(statusVal);
+        const priorityMatch = priorityVal === '' || text.includes(priorityVal);
+        const searchMatch = searchTerm === '' || text.includes(searchTerm);
+
+        if (statusMatch && priorityMatch && searchMatch) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Filter button click
+    filterBtn.addEventListener('click', applyFilters);
+
+    // Reset filters
+    resetBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      statusFilter.value = '';
+      priorityFilter.value = '';
+
+      // Show all again
+      tableRows.forEach(row => (row.style.display = ''));
+      mobileCards.forEach(card => (card.style.display = ''));
     });
-
-    mobileCards.forEach(card => {
-      const text = card.textContent.toLowerCase();
-      const cardStatus = card.querySelector('span.status-')?.textContent || '';
-      const cardPriority = card.querySelector('span.priority-')?.textContent || '';
-
-      if (
-        text.includes(searchTerm) &&
-        (statusVal === '' || cardStatus === statusVal) &&
-        (priorityVal === '' || cardPriority === priorityVal)
-      ) {
-        card.style.display = '';
-      } else {
-        card.style.display = 'none';
-      }
-    });
-  }
-
-  // Search input triggers filter live
-  searchInput.addEventListener('input', applyFilters);
-
-  // Filter button click
-  filterBtn.addEventListener('click', applyFilters);
-
-  // Reset button click
-  resetBtn.addEventListener('click', function() {
-    searchInput.value = '';
-    statusFilter.value = '';
-    priorityFilter.value = '';
-    applyFilters();
-  });
 });
 </script>
 </body>
