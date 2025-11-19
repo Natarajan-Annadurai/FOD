@@ -1,5 +1,4 @@
 import json
-import random
 import socket
 from datetime import datetime
 from django.contrib.auth import authenticate, login, logout
@@ -7,10 +6,9 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.http import JsonResponse
-from django.template.loader import render_to_string
 from django.utils import timezone
 from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Unit, Aircraft, JobToolUsage, \
-    JobAuditLog
+    JobAuditLog, JobCardNotes
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
@@ -200,7 +198,7 @@ def manage_users(request):
             profile.units_display = ", ".join([u.name for u in selected_units])
             profile.trays_display = ", ".join([t.tray_name for t in selected_trays])
 
-        elif role == "Mechanic":
+        elif role == "User":
             selected_stations = ServiceStation.objects.filter(id__in=station_ids)
             selected_units = Unit.objects.filter(id__in=unit_ids)
             selected_trays = Tray.objects.filter(id__in=tray_ids)
@@ -315,10 +313,23 @@ def edit_user(request):
     messages.error(request, "Invalid request method.")
     return redirect("manage_users")
 
+
+@login_required
 def delete_user(request, user_id):
+    # Only allow users with role "admin"
+    if not hasattr(request.user, 'role') or request.user.role.lower() != 'admin':
+        messages.error(request, "You do not have permission to delete users.")
+        return redirect("manage_users")
+
+    # Prevent deleting superuser accidentally
     user = get_object_or_404(User, id=user_id)
+    if user.is_superuser:
+        messages.error(request, "Superuser cannot be deleted.")
+        return redirect("manage_users")
+
+    username = user.username
     user.delete()
-    messages.success(request, f"User {user.username} deleted successfully!")
+    messages.success(request, f"User {username} deleted successfully!")
     return redirect("manage_users")
 
 @login_required
@@ -950,11 +961,20 @@ def global_assigned_tools(request):
     trays = Tray.objects.filter(unit__id=unit_id) if unit_id else Tray.objects.filter(unit__station__id=station_id) if station_id else Tray.objects.all()
     tools = Inventory.objects.filter(inventory_id__in=tray_tools.values_list('inventory__inventory_id', flat=True))
 
+    tray_count = Tray.objects.count()
+    station_count = ServiceStation.objects.count()
+    unit_count = Unit.objects.count()
+    tool_count = TrayTool.objects.count()
+
     context = {
         'tray_tools': tray_tools,
+        'tool_count': tool_count,
         'stations': stations,
+        'station_count': station_count,
         'units': units,
+        'unit_count': unit_count,
         'trays': trays,
+        'tray_count': tray_count,
         'tools': tools,
         'filters': {
             'station_id': station_id,
@@ -1048,224 +1068,212 @@ def get_client_ip(request):
 
 @csrf_exempt
 def receive_detections(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-            now_utc = timezone.now()  # always aware UTC time
+    if request.method != "POST":
+        return JsonResponse({"status": "error", "message": "Only POST allowed"}, status=405)
 
-            # If client provided timestamp, parse and make aware
-            client_ts = data.get("timestamp")
-            if client_ts:
-                try:
-                    parsed_ts = datetime.fromisoformat(str(client_ts))
-                    if timezone.is_naive(parsed_ts):
-                        parsed_ts = timezone.make_aware(parsed_ts, timezone.get_current_timezone())
-                except Exception:
-                    parsed_ts = now_utc
-            else:
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+        now_utc = timezone.now()  # always aware UTC time
+
+        # ---------------- Parse client timestamp ----------------
+        client_ts = data.get("timestamp")
+        if client_ts:
+            try:
+                parsed_ts = datetime.fromisoformat(str(client_ts))
+                if timezone.is_naive(parsed_ts):
+                    parsed_ts = timezone.make_aware(parsed_ts, timezone.get_current_timezone())
+            except Exception:
                 parsed_ts = now_utc
+        else:
+            parsed_ts = now_utc
 
-            timestamp = parsed_ts
-            client_ip = get_client_ip(request)
-            user_id = data.get("user_id")
-            event_type = data.get("event")
-            user_name = data.get("user_name") or data.get("username") or data.get("user")
-            job_id = data.get("job_id")
-            tool_id = data.get("tool_id")
-            tool_name = data.get("tool_name")
-            unit_id = data.get("unit_id")
-            tray_id = data.get("tray_id")
+        timestamp = parsed_ts
+        client_ip = get_client_ip(request)
+        user_id = data.get("user_id")
+        event_type = data.get("event")
+        user_name = data.get("user_name") or data.get("username") or data.get("user")
+        job_id = data.get("job_id")
+        tool_id = data.get("tool_id")
+        tool_name = data.get("tool_name")
+        unit_id = data.get("unit_id")
+        tray_id = data.get("tray_id")
 
-            print("Event :",event_type)
+        print("Event :", event_type)
 
-            is_duplicate = False
+        # ----------------- Handle NOTE_ADDED separately -----------------
+        if event_type == "NOTE_ADDED":
+            # ----------------- DUPLICATE CHECK FOR NOTE_ADDED -----------------
+            existing_note = JobCardNotes.objects.filter(
+                job__job_id=data.get("jobcard_id") or job_id,
+                technician_id=data.get("technician_id"),
+                description=data.get("description"),
+                working_component=data.get("working_component"),
+                timestamp=timestamp
+            ).first()
 
-            # ----------------- GENERIC DUPLICATE CHECK -----------------
-            last_event = ToolEventTracking.objects.filter(
-                client_ip=client_ip,
-                event=event_type,
-                user_name=user_name,
-                tool_name=tool_name,
-                unit_id=unit_id,
-                tray_id=tray_id
-            ).order_by('-timestamp').first()
+            if existing_note:
+                print(f"[{timestamp}] ⚠️ Duplicate NOTE_ADDED ignored for technician {data.get('technician_name')}")
+                return JsonResponse({"status": "ignored", "message": "Duplicate note"}, status=200)
+            # ------------------------------------------------------------------
 
-            if last_event:
-                last_time = last_event.timestamp
-
-                # Ensure timezone-aware comparison
-                if timezone.is_naive(last_time):
-                    last_time = timezone.make_aware(last_time, timezone.get_current_timezone())
-
-                time_diff = (timestamp - last_time).total_seconds()
-
-                if time_diff < DUPLICATE_THRESHOLD:
-                    print(
-                        f"[{timestamp}] ⚠️ Duplicate event ignored: {event_type} from {client_ip} (Δ={time_diff:.2f}s)"
-                    )
-                    is_duplicate = True
-
-            if is_duplicate:
-                return JsonResponse({"status": "ignored"}, status=200)
-            # -----------------------------------------------------------------------------
-
-            hostname = socket.gethostname()
-            server_ip = socket.gethostbyname(hostname)
-
-            # ----------------- Assign job_id, status, verification  only for the jobtoolusage and jobauditlogs table-----------------
-            # Fetch JobCard instance
+            # Fetch or create JobCard
             try:
-                job_instance = JobCard.objects.get(job_id=job_id)
+                job_instance = JobCard.objects.get(job_id=data.get("jobcard_id") or job_id)
             except JobCard.DoesNotExist:
-                # Optionally create a JobCard if it does not exist
-                job_instance = JobCard.objects.create(job_id=job_id, created_by=user_id)
+                job_instance = JobCard.objects.create(job_id=data.get("jobcard_id") or job_id, created_by=user_id)
 
-            # Set status based on event type
-            status_map = {
-                "tray_open": "opened",
-                "tray_close": "closed",
-                "tool_Issued": "issued",
-                "tool_Returned": "returned",
-                "tool_Damaged": "damaged",
-                "auto_logout": "auto_logout",
-                "system_offline":"system_offline",
-                "system_online":"system_online"
-            }
-            status = data.get("status") or status_map.get(event_type, "unknown")
-
-            # Verification completed randomly for now
-            verification_completed = data.get("verification_completed") or (event_type == "tool_Returned")
-            # ------------------------------------------------------
-
-            # Save event to database
-            event = ToolEventTracking.objects.create(
-                # timestamp=data.get("timestamp", timestamp),
+            # Save note
+            note = JobCardNotes.objects.create(
+                job=job_instance,
+                technician_id=data.get("technician_id"),
+                technician_name=data.get("technician_name"),
+                description=data.get("description"),
+                working_component=data.get("working_component"),
+                status=data.get("status") or "Pending",
                 timestamp=timestamp,
-                service_station=data.get("service_station"),
-                unit=data.get("unit"),
-                unit_id=data.get("unit_id"),
-                user_id=data.get("user_id"),
-                user_name=data.get("user_name"),
-                event=event_type,
-                tray_id=data.get("tray_id"),
-                tool_id=data.get("tool_id"),
-                tool_name=data.get("tool_name"),
-                device_id=data.get("device_id"),
-                client_ip=client_ip,
-                job_id=job_instance,
-                status=status,
-                verification_completed=verification_completed,
-                raw_data=data
             )
+            print(f"NOTE_ADDED saved: {note.id}, job={job_instance.job_id}, technician={note.technician_name}")
+            return JsonResponse({"status": "success", "message": "Note added", "note_id": note.id}, status=201)
 
-            print(f"[{timestamp}] Event saved: {event.event} from client {client_ip}")
+        # ----------------- All other events -----------------
+        # Duplicate check
+        is_duplicate = False
+        last_event = ToolEventTracking.objects.filter(
+            client_ip=client_ip,
+            event=event_type,
+            user_name=user_name,
+            tool_name=tool_name,
+            unit_id=unit_id,
+            tray_id=tray_id
+        ).order_by('-timestamp').first()
 
-            # ----------------- JobToolUsage mapping the unit_id, tray_id, tool_id -----------------
-            # Fetch Unit
-            unit_instance = None
-            if unit_id:
-                try:
-                    unit_instance = Unit.objects.get(unit_id=unit_id)
-                except Unit.DoesNotExist:
-                    pass  # handle as needed
-            # Fetch Tray
-            tray_instance = None
-            if tray_id:
-                try:
-                    tray_instance = Tray.objects.get(tray_id=tray_id)
-                except Tray.DoesNotExist:
-                    pass  # handle as needed
+        if last_event:
+            last_time = last_event.timestamp
+            if timezone.is_naive(last_time):
+                last_time = timezone.make_aware(last_time, timezone.get_current_timezone())
+            time_diff = (timestamp - last_time).total_seconds()
+            if time_diff < DUPLICATE_THRESHOLD:
+                print(f"[{timestamp}] ⚠️ Duplicate event ignored: {event_type} from {client_ip} (Δ={time_diff:.2f}s)")
+                is_duplicate = True
 
-            # Fetch Tool
-            tool_instance = None
-            if tool_id:
-                try:
-                    tool_instance = ToolCreation.objects.get(tool_id=tool_id)
-                except ToolCreation.DoesNotExist:
-                    pass  # handle as needed
+        if is_duplicate:
+            return JsonResponse({"status": "ignored"}, status=200)
 
-            # ----------------- JobToolUsage -----------------
-            try:
-                if event_type == "tool_Issued" and user_id and tool_id:
-                    JobToolUsage.objects.create(
-                        issued_time=timestamp,
-                        status='issued',
-                        issued_by_id=user_id,
-                        job=job_instance,
-                        tool=tool_instance,
-                        tray=tray_instance,
-                        unit=unit_instance,
-                    )
-                    print(f"JobToolUsage created: job={job_instance}, tool={tool_instance}, tray={tray_instance}, unit={unit_instance}")
-                elif event_type == "tool_Returned" and tool_id:
-                    usage = JobToolUsage.objects.filter(
-                        job=job_instance,
-                        tool=tool_instance,
-                        status="issued"
-                    ).order_by('-issued_time').first()
+        # Fetch JobCard
+        job_instance, _ = JobCard.objects.get_or_create(job_id=job_id, defaults={"created_by": user_id})
 
-                    if usage:
-                        usage.returned_time = timestamp
-                        usage.status = 'returned'
-                        usage.returned_by_id = user_id
-                        usage.save()
-                        print(f"JobToolUsage updated (returned): {usage.id}, job={job_instance}, tool={tool_instance}")
+        # Save ToolEventTracking
+        status_map = {
+            "tray_open": "opened",
+            "tray_close": "closed",
+            "tool_Issued": "issued",
+            "tool_Returned": "returned",
+            "tool_Damaged": "damaged",
+            "auto_logout": "auto_logout",
+            "system_offline": "system_offline",
+            "system_online": "system_online"
+        }
+        status = data.get("status") or status_map.get(event_type, "unknown")
+        verification_completed = data.get("verification_completed") or (event_type == "tool_Returned")
 
-                elif event_type == "tool_Damaged" and tool_id:
+        event = ToolEventTracking.objects.create(
+            timestamp=timestamp,
+            service_station=data.get("service_station"),
+            unit=data.get("unit"),
+            unit_id=unit_id,
+            user_id=user_id,
+            user_name=user_name,
+            event=event_type,
+            tray_id=tray_id,
+            tool_id=tool_id,
+            tool_name=tool_name,
+            device_id=data.get("device_id"),
+            client_ip=client_ip,
+            job_id=job_instance,
+            status=status,
+            verification_completed=verification_completed,
+            raw_data=data
+        )
+        print(f"[{timestamp}] Event saved: {event.event} from client {client_ip}")
 
-                    usage = JobToolUsage.objects.filter(job=job_instance, tool=tool_instance).first()
+        # ----------------- JobToolUsage -----------------
+        unit_instance = Unit.objects.filter(unit_id=unit_id).first() if unit_id else None
+        tray_instance = Tray.objects.filter(tray_id=tray_id).first() if tray_id else None
+        tool_instance = ToolCreation.objects.filter(tool_id=tool_id).first() if tool_id else None
 
-                    if usage:
-                        usage.status = "damaged"
-                        usage.save()
-                        print(f"JobToolUsage updated (damaged): {usage.id}, job={job_instance}, tool={tool_instance}")
-            except Exception as e:
-                print("JobToolUsage creation failed:", e)
-
-            # ----------------- JobAuditLog -----------------
-            try:
-                audit_action_map = {
-                    'tool_Issued': 'tool_Issued',
-                    'tool_Returned': 'tool_Returned',
-                    'tool_Damaged': 'tool_Damaged',
-                    'tray_open': 'tray_open',
-                    'tray_close': 'tray_close',
-                    'auto_logout': 'auto_logout',
-                    'system_offline': 'system_offline',
-                    'system_online': 'system_online',
-                }
-
-                JobAuditLog.objects.create(
-                    timestamp=timestamp,
-                    action=audit_action_map.get(event.event, event.event),
-                    details=json.dumps(data),
-                    user_id=user_id,
-                    job=job_instance
+        try:
+            if event_type == "tool_Issued" and user_id and tool_instance:
+                JobToolUsage.objects.create(
+                    issued_time=timestamp,
+                    status='issued',
+                    issued_by_id=user_id,
+                    job=job_instance,
+                    tool=tool_instance,
+                    tray=tray_instance,
+                    unit=unit_instance,
                 )
-                print(f"JobAuditLog created:  job={job_instance}, user={user_id}")
-            except Exception as e:
-                print("JobAuditLog creation failed:", e)
-
-            # 🔁 Update inventory separately
-            inventory_result = update_inventory_for_event(event)
-
-            return JsonResponse({
-                "status": "success",
-                "message": "Event stored successfully",
-                "inventory_update": inventory_result,
-                "server_ip": server_ip,
-                "client_ip": client_ip,
-                "saved_event_id": event.id
-            }, status=201)
-
+            elif event_type == "tool_Returned" and tool_instance:
+                usage = JobToolUsage.objects.filter(
+                    job=job_instance,
+                    tool=tool_instance,
+                    status="issued"
+                ).order_by('-issued_time').first()
+                if usage:
+                    usage.returned_time = timestamp
+                    usage.status = 'returned'
+                    usage.returned_by_id = user_id
+                    usage.save()
+            elif event_type == "tool_Damaged" and tool_instance:
+                usage = JobToolUsage.objects.filter(job=job_instance, tool=tool_instance).first()
+                if usage:
+                    usage.status = "damaged"
+                    usage.save()
         except Exception as e:
-            print("[Error receiving event]:", e)
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+            print("JobToolUsage creation failed:", e)
 
-    return JsonResponse({"status": "error", "message": "Only POST allowed"}, status=405)
+        # ----------------- JobAuditLog -----------------
+        try:
+            audit_action_map = {
+                'tool_Issued': 'tool_Issued',
+                'tool_Returned': 'tool_Returned',
+                'tool_Damaged': 'tool_Damaged',
+                'tray_open': 'tray_open',
+                'tray_close': 'tray_close',
+                'auto_logout': 'auto_logout',
+                'system_offline': 'system_offline',
+                'system_online': 'system_online',
+            }
+            JobAuditLog.objects.create(
+                timestamp=timestamp,
+                action=audit_action_map.get(event.event, event.event),
+                details=json.dumps(data),
+                user_id=user_id,
+                job=job_instance
+            )
+        except Exception as e:
+            print("JobAuditLog creation failed:", e)
+
+        # ----------------- Inventory Update -----------------
+        inventory_result = update_inventory_for_event(event)
+        server_ip = socket.gethostbyname(socket.gethostname())
+
+        return JsonResponse({
+            "status": "success",
+            "message": "Event stored successfully",
+            "inventory_update": inventory_result,
+            "server_ip": server_ip,
+            "client_ip": client_ip,
+            "saved_event_id": event.id
+        }, status=201)
+
+    except Exception as e:
+        print("[Error receiving event]:", e)
+        return JsonResponse({"status": "error", "message": str(e)}, status=400)
 
 def aircraft_list(request):
     if request.method == 'POST':
+        print("DEBUG POST DATA:", request.POST)
+        aircraft_id = request.POST.get('aircraft_id', "").strip()
         reg_no = request.POST.get('registration_no')
         model = request.POST.get('model')
         manufacturer = request.POST.get('manufacturer')
@@ -1275,6 +1283,7 @@ def aircraft_list(request):
         remarks = request.POST.get('remarks')
 
         Aircraft.objects.create(
+            aircraft_id=aircraft_id,
             registration_no=reg_no,
             model=model,
             manufacturer=manufacturer,
@@ -1307,7 +1316,7 @@ def jobcard_list(request):
     units = Unit.objects.all()
 
     mechanics = User.objects.filter(
-        userprofile__role='Mechanic',
+        userprofile__role='User',
         profile__status='ACTIVE'
     )
 
@@ -1339,7 +1348,7 @@ def jobcard_create(request):
     units = Unit.objects.filter(status='AVAILABLE')
     # Only available mechanics
     mechanics = User.objects.filter(
-        userprofile__role='Mechanic',
+        userprofile__role='User',
         userprofile__status='AVAILABLE',
         profile__status='ACTIVE'
     )
@@ -1393,13 +1402,13 @@ def jobcard_create(request):
 
         # Mark selected units as BUSY
         for unit in job.assigned_units.all():
-            unit.status = "BUSY"
+            unit.status = "IN-USE"
             unit.save()
 
         # Mark selected technicians as BUSY
         for tech in job.assigned_technicians.all():
             profile = tech.userprofile
-            profile.status = "BUSY"
+            profile.status = "IN-USE"
             profile.save()
 
         # Better way to print QA Inspector
@@ -1429,6 +1438,119 @@ def jobcard_create(request):
     }
     return render(request, 'jobcards/jobcard_create.html', context)
 
+from django.db.models import Q, Count
+
+def jobcard_notes(request, job_id):
+    job = JobCard.objects.get(job_id=job_id)
+
+    base_qs = JobCardNotes.objects.filter(job=job)
+
+    # -----------------------------
+    # Unique dropdown values
+    # -----------------------------
+    technicians = (
+        base_qs.exclude(technician_name__isnull=True)
+               .exclude(technician_name__exact="")
+               .values_list("technician_name", flat=True)
+               .distinct()
+    )
+
+    components = (
+        base_qs.exclude(working_component__isnull=True)
+               .exclude(working_component__exact="")
+               .values_list("working_component", flat=True)
+               .distinct()
+    )
+
+    statuses = (
+        base_qs.exclude(status__isnull=True)
+               .exclude(status__exact="")
+               .values_list("status", flat=True)
+               .distinct()
+    )
+
+    # -----------------------------
+    # Filters
+    # -----------------------------
+    tech = request.GET.get("technician")
+    comp = request.GET.get("component")
+    status = request.GET.get("status")
+    search = request.GET.get("search")
+
+    notes = base_qs.order_by("-timestamp")
+
+    if tech:
+        notes = notes.filter(technician_name=tech)
+
+    if comp:
+        notes = notes.filter(working_component=comp)
+
+    if status:
+        notes = notes.filter(status=status)
+
+    if search:
+        notes = notes.filter(
+            Q(description__icontains=search) |
+            Q(technician_name__icontains=search) |
+            Q(working_component__icontains=search)
+        )
+
+    # -----------------------------
+    # Status counts (AFTER filters)
+    # -----------------------------
+    counts = notes.values("status").annotate(total=Count("id"))
+
+    # Map raw status to normalized bucket
+    status_map = {
+        "completed": "Completed",
+        "in progress": "In Progress",
+        "pending": "Pending",
+        "issue": "Pending",  # if you want issue to count as pending
+    }
+
+    completed_count = sum(
+        i["total"] for i in counts if i["status"].strip().lower() == "completed"
+    )
+    in_progress_count = sum(
+        i["total"] for i in counts if i["status"].strip().lower() == "in progress"
+    )
+    pending_count = sum(
+        i["total"] for i in counts if i["status"].strip().lower() == "pending"
+    )
+
+    total_count = notes.count()
+
+    # Filter notes based on search/filters
+    notes_queryset = JobCardNotes.objects.filter(job=job).order_by('-timestamp')
+
+    # Apply pagination (10 notes per page)
+    paginator = Paginator(notes_queryset, 10)  # 10 records per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, "jobcards/jobcard_notes.html", {
+        "job": job,
+        "notes": notes,
+        'page_obj': page_obj,
+
+        # dropdown data
+        "technicians": technicians,
+        "components": components,
+        "statuses": statuses,
+
+        # selected values
+        "selected_tech": tech,
+        "selected_comp": comp,
+        "selected_status": status,
+        "search": search,
+
+        # counts
+        "total_notes": total_count,
+        "completed_count": completed_count,
+        "in_progress_count": in_progress_count,
+        "pending_count": pending_count,
+    })
+
 def jobcard_edit(request, job_id):
     job = get_object_or_404(JobCard, job_id=job_id)
 
@@ -1439,7 +1561,7 @@ def jobcard_edit(request, job_id):
     )
 
     mechanics = User.objects.filter(
-        userprofile__role="Mechanic"
+        userprofile__role="User"
     ).filter(
         Q(userprofile__status="AVAILABLE") & Q(profile__status='ACTIVE') |
         Q(id__in=job.assigned_technicians.values_list('id', flat=True))
@@ -1478,7 +1600,7 @@ def jobcard_edit(request, job_id):
 
         # Update unit statuses
         # Mark newly assigned units as BUSY
-        Unit.objects.filter(id__in=new_unit_ids).update(status="BUSY")
+        Unit.objects.filter(id__in=new_unit_ids).update(status="IN-USE")
         # Mark units unassigned from this job as AVAILABLE
         unassigned_units = current_unit_ids - new_unit_ids
         Unit.objects.filter(id__in=unassigned_units).update(status="AVAILABLE")
@@ -1493,7 +1615,7 @@ def jobcard_edit(request, job_id):
 
         # Update technician statuses
         # Mark newly assigned as BUSY
-        UserProfile.objects.filter(user_id__in=new_tech_ids).update(status="BUSY")
+        UserProfile.objects.filter(user_id__in=new_tech_ids).update(status="IN-USE")
         # Mark unassigned as AVAILABLE
         unassigned_techs = current_tech_ids - new_tech_ids
         UserProfile.objects.filter(user_id__in=unassigned_techs).update(status="AVAILABLE")

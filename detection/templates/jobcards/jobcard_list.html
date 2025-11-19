@@ -309,6 +309,9 @@
                   <a href="{% url 'jobcard_detail' job.job_id %}" class="text-blue-600 hover:text-blue-900" title="View Details">
                     <i class="fas fa-eye"></i>
                   </a>
+                  <a href="{% url 'jobcard_notes' job.job_id %}" class="text-purple-600 hover:text-purple-900" title="View Job Notes">
+                        <i class="fas fa-sticky-note"></i>
+                  </a>
                   <a href="#" class="text-green-600 hover:text-green-900" title="Edit" onclick="openEditModal('{{ job.job_id }}')">
                     <i class="fas fa-edit"></i>
                   </a>

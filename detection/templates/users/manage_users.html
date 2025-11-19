@@ -7,6 +7,20 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
+
+{% if messages %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+    {% for message in messages %}
+    <div
+        class="mb-4 px-4 py-3 rounded-lg
+        {% if message.tags == 'success' %}bg-green-100 text-green-800{% elif message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-gray-100 text-gray-800{% endif %}"
+    >
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <body class="bg-gray-100 p-6">
 
 <div class="max-w-9xl mx-auto bg-white p-6 rounded-lg shadow-lg">
@@ -425,11 +439,11 @@
           stationDiv.classList.remove("hidden");
           infoText.textContent = "Supervisor has access to all units and trays under selected stations.";
           infoText.classList.remove("hidden");
-      } else if (role === "Mechanic") {
+      } else if (role === "User") {
           stationDiv.classList.remove("hidden");
           unitDiv.classList.remove("hidden");
           trayDiv.classList.remove("hidden");
-          infoText.textContent = "Mechanic can access only assigned station, unit, and tray.";
+          infoText.textContent = "User can access only assigned station, unit, and tray.";
           infoText.classList.remove("hidden");
 
           // Automatically tick all trays for mechanics after population
@@ -556,7 +570,7 @@
 
         // For Mechanic: automatically check all trays from selected units
         const currentRole = document.getElementById("hiddenRole").value;
-        if (currentRole === "Mechanic") {
+        if (currentRole === "User") {
               trayContainer.querySelectorAll(".tray-checkbox").forEach(cb => {
                 cb.checked = true;
               });
@@ -633,11 +647,11 @@ document.querySelectorAll(".assign-btn").forEach(btn => {
             stationDiv.classList.remove("hidden");
             infoText.textContent = "Supervisor has access to all units and trays under selected stations.";
             infoText.classList.remove("hidden");
-        } else if (role === "Mechanic") {
+        } else if (role === "User") {
             stationDiv.classList.remove("hidden");
             unitDiv.classList.remove("hidden");
             trayDiv.classList.remove("hidden");
-            infoText.textContent = "Mechanic can access only assigned station, unit, and tray.";
+            infoText.textContent = "User can access only assigned station, unit, and tray.";
             infoText.classList.remove("hidden");
         }
 

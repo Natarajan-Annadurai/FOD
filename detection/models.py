@@ -112,7 +112,7 @@ class Unit(models.Model):
     # NEW: Unit status
     STATUS_CHOICES = [
         ('AVAILABLE', 'Available'),
-        ('BUSY', 'Busy'),
+        ('IN-USE', 'In-Use'),
         ('MAINTENANCE', 'Under Maintenance'),
         ('OFFLINE', 'Offline'),
     ]
@@ -178,7 +178,7 @@ class UserProfile(models.Model):
     # NEW: Technician availability
     STATUS_CHOICES = [
         ('AVAILABLE', 'Available'),
-        ('BUSY', 'Busy'),
+        ('IN-USE', 'In-Use'),
         ('ON_LEAVE', 'On Leave'),
         ('OFF_DUTY', 'Off Duty'),
     ]
@@ -348,12 +348,10 @@ class JobCardNotes(models.Model):
     job = models.ForeignKey(JobCard, on_delete=models.CASCADE)
     technician_id = models.CharField(max_length=100, null=True)
     technician_name = models.CharField(max_length=255, null=True)
-    note_text = models.TextField()
+    description = models.TextField()
     working_component = models.CharField(max_length=255, null=True)
     status = models.CharField(max_length=50, null=True)
     timestamp = models.DateTimeField()
-    device_id = models.CharField(max_length=255, null=True)
-    client_ip = models.CharField(max_length=255, null=True)
 
     def __str__(self):
         return f"Note for {self.job.job_id} by {self.technician_name}"

@@ -39,6 +39,7 @@ urlpatterns = [
 
     path('jobcards/', views.jobcard_list, name='jobcard_list'),
     path('jobcards/create/', views.jobcard_create, name='jobcard_create'),
+    path("jobcard/<str:job_id>/notes/", views.jobcard_notes, name="jobcard_notes"),
     path('<str:job_id>/edit/', views.jobcard_edit, name='jobcard_edit'),
     path('<str:job_id>/delete/', views.jobcard_delete, name='jobcard_delete'),
 
