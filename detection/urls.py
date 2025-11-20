@@ -12,7 +12,14 @@ urlpatterns = [
     path('update-user-status/', views.update_user_status, name='update_user_status'),
     path('edit-user/', views.edit_user, name='edit_user'),
     path("delete-user/<int:user_id>/", views.delete_user, name="delete_user"),
+
     path('dashboard/', views.dashboard, name='dashboard'),
+    path("dashboard/service-stations/", views.centralized_service_station_dashboard, name="centralized_system_monitoring"),
+    path("api/station/<int:station_id>/units/", views.get_units_by_station, name="api_units_by_station"),
+    path("api/unit/<int:unit_id>/trays/", views.get_trays_by_unit, name="api_trays_by_unit"),
+    path("api/tray/<int:tray_id>/tools/", views.get_tools_by_tray, name="api_tools_by_tray"),
+    path('jobcards/station/<int:station_id>/', views.jobcard_list_by_station, name='jobcard_list_by_station'),
+
     path('dashboard/tool-activity/', views.tool_activity_dashboard, name='tool_activity_dashboard'),
     path('tools-in-use/', views.tools_in_use, name='tools_in_use'),
     path('inventory/', views.inventory_view, name='inventory'),

@@ -336,6 +336,204 @@ def delete_user(request, user_id):
 def dashboard(request):
     return render(request, 'dashboard.html')
 
+
+def centralized_service_station_dashboard(request):
+    service_stations = ServiceStation.objects.all()
+
+    dashboard_data = []
+    total_units = 0
+    total_tools = 0
+    total_jobcards = 0
+
+    for station in service_stations:
+
+        station_id = station.id  # Integer PK, not station_id field
+        # Units under this station
+        units_count = Unit.objects.filter(station_id=station_id).count()
+        # Trays under this station
+        trays_count = Tray.objects.filter(unit__station_id=station_id).count()
+        # Tools under this station (via Tray → TrayTool)
+        tools_count = TrayTool.objects.filter(tray__unit__station_id=station_id).count()
+
+        # JobCards queryset and count
+        jobcards = JobCard.objects.filter(service_station_id=station_id)
+        jobcard_count = jobcards.count()
+
+        total_units += units_count
+        total_tools += tools_count
+        total_jobcards += jobcard_count
+
+        # Collect technicians info per jobcard
+        technicians_info = []
+        for job in jobcards:
+            for tech in job.assigned_technicians.all():
+                technicians_info.append({
+                    'tech_name': tech.get_full_name() or tech.username,
+                    'tech_id': tech.id,
+                    'assigned_at': job.created_at  # or your actual assignment timestamp
+                })
+
+        dashboard_data.append({
+            "station": station,
+            "units_count": units_count,
+            "trays_count": trays_count,
+            "tools_count": tools_count,
+            "jobcard_count": jobcard_count,
+            "technicians": technicians_info,
+        })
+
+    return render(request, "dashboard/centralized_system_monitoring.html", {
+        "dashboard_data": dashboard_data,
+        "total_units": total_units,
+        "total_tools": total_tools,
+        "total_jobcards": total_jobcards,
+    })
+
+def get_units_by_station(request, station_id):
+    units = Unit.objects.filter(station_id=station_id)
+
+    data = []
+    for u in units:
+        tray_count = Tray.objects.filter(unit=u).count()
+        tool_count = TrayTool.objects.filter(tray__unit=u).count()
+
+        data.append({
+            "unit_id": u.id,
+            "name": u.name,
+            "status": u.status,
+            "tray_count": tray_count,
+            "tool_count": tool_count,
+        })
+
+    return JsonResponse(data, safe=False)
+
+def get_trays_by_unit(request, unit_id):
+    trays = Tray.objects.filter(unit_id=unit_id)
+    data = []
+
+    for t in trays:
+        tray_tools = TrayTool.objects.filter(tray=t)
+
+        available_count = 0
+        inuse_count = 0
+
+        for tt in tray_tools:
+            # Only events for this tray and tool
+            last_event = (
+                ToolEventTracking.objects
+                .filter(tray_id=t.tray_id, tool_id=tt.tool_id)
+                .order_by('-timestamp')
+                .first()
+            )
+
+            status = "AVAILABLE"
+            if last_event:
+                ev = last_event.event.lower()
+                if ev == "tool_issued":
+                    status = "IN-USE"
+                elif ev == "tool_returned":
+                    status = "AVAILABLE"
+                else:
+                    status = ev.upper()
+
+            if status == "AVAILABLE":
+                available_count += tt.assigned_quantity
+            elif status == "IN-USE":
+                inuse_count += tt.assigned_quantity
+
+        total_tools = sum(tt.assigned_quantity for tt in tray_tools)
+
+        data.append({
+            "tray_id": t.id,
+            "tray_id_original": t.tray_id,
+            "tray_name": t.tray_name,
+            "total_tools": total_tools,
+            "available_tools": available_count,
+            "inuse_tools": inuse_count,
+        })
+
+    return JsonResponse(data, safe=False)
+
+def get_tools_by_tray(request, tray_id):
+    # Fetch only TrayTool entries for this tray
+    tray_tools = TrayTool.objects.filter(tray_id=tray_id, assigned_quantity__gt=0).select_related('inventory',
+                                                                                                  'inventory__tool')
+    data = []
+
+    for t in tray_tools:
+        tool_obj = t.inventory.tool if t.inventory else None
+        tool_name = tool_obj.tool_name if tool_obj else "Unknown"
+
+        # Fetch last event for this tool in this tray
+        last_event = (
+            ToolEventTracking.objects
+            .filter(tool_id=t.tool_id, tray_id=tray_id)
+            .order_by('-timestamp')
+            .first()
+        )
+
+        # Determine status
+        status = "AVAILABLE"
+        if last_event:
+            ev = last_event.event.upper()
+            if ev in ["TOOL_ISSUED", "ISSUED"]:
+                status = "IN-USE"
+            elif ev in ["RETURNED", "TOOL_RETURNED"]:
+                status = "AVAILABLE"
+
+        data.append({
+            "name": tool_name,
+            "tool_id": t.tool_id,
+            "tray_name": t.tray.tray_name,
+            "status": status,
+            "quantity": t.assigned_quantity,  # optional
+        })
+
+    return JsonResponse(data, safe=False)
+
+def jobcard_list_by_station(request, station_id):
+    jobcards = JobCard.objects.select_related(
+        'aircraft', 'qa_inspector', 'service_station', 'created_by'
+    ).prefetch_related(
+        'assigned_units', 'assigned_technicians'
+    ).filter(service_station_id=station_id).order_by('-created_at')
+
+    # Summary counts
+    total_jobcards = jobcards.count()
+    in_progress_count = jobcards.filter(status='IN_PROGRESS').count()
+    completed_count = jobcards.filter(status='CLOSED').count()
+    high_priority_count = jobcards.filter(priority='HIGH').count()
+    critical_count = jobcards.filter(priority='CRITICAL').count()
+
+    units = Unit.objects.filter(station_id=station_id)  # Only units in this station
+
+    mechanics = User.objects.filter(
+        userprofile__role='User',
+        profile__status='ACTIVE',
+        technician_jobs__service_station_id=station_id
+    ).distinct()
+
+    qa_users = User.objects.filter(
+        Q(userprofile__role__iexact='Supervisor') |
+        Q(userprofile__role__iexact='Admin') |
+        Q(is_superuser=True)
+    ).distinct()
+
+    context = {
+        'jobcards': jobcards,
+        'total_jobcards': total_jobcards,
+        'units': units,
+        'mechanics': mechanics,
+        'qa_users': qa_users,
+        'in_progress_count': in_progress_count,
+        'completed_count': completed_count,
+        'high_priority_count': high_priority_count,
+        'critical_count': critical_count,
+        'station_id': station_id,
+    }
+
+    return render(request, 'jobcards/jobcard_list.html', context)
+
 def tool_activity_dashboard(request):
     # All events ordered by latest
     events_list = ToolEventTracking.objects.all().order_by('-timestamp')
