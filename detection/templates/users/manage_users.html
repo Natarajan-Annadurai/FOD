@@ -108,8 +108,8 @@
         </td>
         <td class="py-2 px-4 text-center whitespace-nowrap">
           <button
-                class="assign-btn bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition
-                       {% if user.status == 'INACTIVE' %}
+                class="assign-btn bg-blue-600 text-white px-1 py-1 rounded hover:bg-blue-700 transition
+                       {% if user.status == 'ACTIVE' or user.status == 'INACTIVE' %}
                            opacity-50 cursor-not-allowed grayscale shadow-inner
                        {% endif %}"
                 data-user-id="{{ user.id }}"
@@ -118,12 +118,12 @@
                 data-stations="{{ user.userprofile.stations_display|default_if_none:'' }}"
                 data-units="{{ user.userprofile.units_display|default_if_none:'' }}"
                 data-trays="{{ user.userprofile.trays_display|default_if_none:'' }}"
-                {% if user.status == 'INACTIVE' %}disabled{% endif %}>
+                {% if user.status == 'ACTIVE' or user.status == 'INACTIVE' %}disabled{% endif %}>
                 Assign
           </button>
 
           <button
-            class="edit-user-btn bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition"
+            class="edit-user-btn bg-yellow-500 text-white px-1 py-1 rounded hover:bg-yellow-600 transition"
             data-user-id="{{ user.id }}"
             data-username="{{ user.username }}"
             data-first-name="{{ user.first_name }}"
@@ -146,7 +146,7 @@
           <a
             href="{% url 'delete_user' user.id %}"
             onclick="return confirm('Are you sure you want to delete user {{ user.username }}?');"
-            class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">
+            class="bg-red-600 text-white px-1 py-1 rounded hover:bg-red-700">
             Delete
           </a>
         </td>

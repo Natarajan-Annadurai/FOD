@@ -43,6 +43,8 @@ urlpatterns = [
     path('api/detections/', views.receive_detections, name='receive_detections'),
 
     path('aircraft/', views.aircraft_list, name='aircraft_list'),
+    path('aircraft/edit/<int:pk>/', views.aircraft_edit, name='aircraft_edit'),
+    path('aircraft/delete/<int:pk>/', views.aircraft_delete, name='aircraft_delete'),
 
     path('jobcards/', views.jobcard_list, name='jobcard_list'),
     path('jobcards/create/', views.jobcard_create, name='jobcard_create'),

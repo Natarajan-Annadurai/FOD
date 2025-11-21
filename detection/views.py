@@ -316,16 +316,7 @@ def edit_user(request):
 
 @login_required
 def delete_user(request, user_id):
-    # Only allow users with role "admin"
-    if not hasattr(request.user, 'role') or request.user.role.lower() != 'admin':
-        messages.error(request, "You do not have permission to delete users.")
-        return redirect("manage_users")
-
-    # Prevent deleting superuser accidentally
     user = get_object_or_404(User, id=user_id)
-    if user.is_superuser:
-        messages.error(request, "Superuser cannot be deleted.")
-        return redirect("manage_users")
 
     username = user.username
     user.delete()
@@ -467,7 +458,7 @@ def get_tools_by_tray(request, tray_id):
         # Fetch last event for this tool in this tray
         last_event = (
             ToolEventTracking.objects
-            .filter(tool_id=t.tool_id, tray_id=tray_id)
+            .filter(tool_id=t.inventory.tool.id, tray_id=tray_id)
             .order_by('-timestamp')
             .first()
         )
@@ -629,7 +620,7 @@ def tool_activity_dashboard(request):
     }
     return render(request, 'tool_activity_dashboard.html', context)
 
-from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch
+from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch, Avg
 
 
 def tools_in_use(request):
@@ -1470,9 +1461,8 @@ def receive_detections(request):
 
 def aircraft_list(request):
     if request.method == 'POST':
-        print("DEBUG POST DATA:", request.POST)
-        aircraft_id = request.POST.get('aircraft_id', "").strip()
-        reg_no = request.POST.get('registration_no')
+        aircraft_id = request.POST.get('aircraft_id')
+        registration_no = request.POST.get('registration_no')
         model = request.POST.get('model')
         manufacturer = request.POST.get('manufacturer')
         airline_name = request.POST.get('airline_name')
@@ -1480,21 +1470,87 @@ def aircraft_list(request):
         flight_cycles = request.POST.get('flight_cycles') or 0
         remarks = request.POST.get('remarks')
 
-        Aircraft.objects.create(
-            aircraft_id=aircraft_id,
-            registration_no=reg_no,
-            model=model,
-            manufacturer=manufacturer,
-            airline_name=airline_name,
-            flight_hours=flight_hours,
-            flight_cycles=flight_cycles,
-            remarks=remarks
+        # Check uniqueness
+        if Aircraft.objects.filter(aircraft_id=aircraft_id).exists():
+            messages.error(request, f"Aircraft ID '{aircraft_id}' already exists.")
+        elif Aircraft.objects.filter(registration_no=registration_no).exists():
+            messages.error(request, f"Registration No '{registration_no}' already exists.")
+        else:
+            # Save new aircraft
+            Aircraft.objects.create(
+                aircraft_id=aircraft_id,
+                registration_no=registration_no,
+                model=model,
+                manufacturer=manufacturer,
+                airline_name=airline_name,
+                flight_hours=int(flight_hours),
+                flight_cycles=int(flight_cycles),
+                remarks=remarks
+            )
+            messages.success(request, f"Aircraft '{aircraft_id}' added successfully.")
+            return redirect('aircraft_list')
+
+    # GET request
+    query = request.GET.get('q', '')
+    if query:
+        aircrafts = Aircraft.objects.filter(
+            Q(aircraft_id__icontains=query) |
+            Q(registration_no__icontains=query) |
+            Q(model__icontains=query) |
+            Q(manufacturer__icontains=query) |
+            Q(airline_name__icontains=query)
         )
+    else:
+        aircrafts = Aircraft.objects.all()
+
+    total_aircraft = aircrafts.count()
+    active_count = aircrafts.filter(flight_hours__gt=0).count()
+    maintenance_count = aircrafts.filter(flight_hours=0).count()
+    avg_hours = aircrafts.aggregate(avg=Avg('flight_hours'))['avg'] or 0
+
+    context = {
+        'aircrafts': aircrafts,
+        'total_aircraft': total_aircraft,
+        'active_count': active_count,
+        'maintenance_count': maintenance_count,
+        'avg_hours': int(avg_hours),
+    }
+    return render(request, 'aircraft/aircraft_list.html', context)
+
+def aircraft_edit(request, pk):
+    aircraft = get_object_or_404(Aircraft, pk=pk)
+    if request.method == 'POST':
+        aircraft_id = request.POST.get('aircraft_id').strip()
+        reg_no = request.POST.get('registration_no').strip()
+        model = request.POST.get('model')
+        manufacturer = request.POST.get('manufacturer')
+        airline_name = request.POST.get('airline_name')
+        flight_hours = request.POST.get('flight_hours') or 0
+        flight_cycles = request.POST.get('flight_cycles') or 0
+        remarks = request.POST.get('remarks')
+
+        if Aircraft.objects.filter(registration_no=reg_no).exclude(pk=pk).exists():
+            messages.error(request, f"Aircraft with registration '{reg_no}' already exists.")
+        else:
+            aircraft.aircraft_id = aircraft_id
+            aircraft.registration_no = reg_no
+            aircraft.model = model
+            aircraft.manufacturer = manufacturer
+            aircraft.airline_name = airline_name
+            aircraft.flight_hours = flight_hours
+            aircraft.flight_cycles = flight_cycles
+            aircraft.remarks = remarks
+            aircraft.save()
+            messages.success(request, "Aircraft updated successfully.")
 
         return redirect('aircraft_list')
 
-    aircrafts = Aircraft.objects.all().order_by('-id')
-    return render(request, 'aircraft/aircraft_list.html', {'aircrafts': aircrafts})
+
+def aircraft_delete(request, pk):
+    aircraft = get_object_or_404(Aircraft, pk=pk)
+    aircraft.delete()
+    messages.success(request, "Aircraft deleted successfully.")
+    return redirect('aircraft_list')
 
 #  List all job cards
 def jobcard_list(request):
