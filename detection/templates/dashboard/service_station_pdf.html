@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Service Station Report - {{ station.name }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+```
+    .container {
+        width: 100%;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    h1, h2, h3 {
+        color: #222;
+        margin: 0;
+    }
+
+    h1 { font-size: 22px; margin-bottom: 5px; }
+    h2 { font-size: 18px; margin: 15px 0 5px; }
+    h3 { font-size: 16px; margin: 10px 0 3px; }
+
+    .section {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .stats {
+        display: table;
+        width: 100%;
+        margin-bottom: 15px;
+    }
+
+    .stat {
+        display: table-cell;
+        width: 20%;
+        text-align: center;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        margin-right: 5px;
+    }
+
+    .stat-value {
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+    }
+
+    th, td {
+        border: 1px solid #ccc;
+        padding: 5px 8px;
+        text-align: left;
+    }
+
+    th {
+        background: #f0f0f0;
+        font-weight: bold;
+    }
+
+    .text-center { text-align: center; }
+    .text-small { font-size: 11px; }
+    .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #fff;
+    }
+
+    .bg-gray { background-color: #666; }
+    .bg-blue { background-color: #3490dc; }
+    .bg-green { background-color: #38c172; }
+    .bg-yellow { background-color: #ffed4a; color: #333; }
+</style>
+```
+
+</head>
+<body>
+
+<div class="container">
+
+```
+<!-- Header -->
+<div class="section text-center">
+    <h1>{{ station.name }} — Service Station Report</h1>
+    <p>Comprehensive overview of units, tools, technicians & jobcards</p>
+</div>
+
+<!-- Station Info -->
+<div class="section">
+    <h2>Station Details</h2>
+    <p><strong>Location:</strong> {{ station.location }}</p>
+    <p><strong>Manager:</strong>
+        {% if station.manager %}
+            {{ station.manager.get_full_name|default:station.manager.username }}
+        {% else %}
+            N/A
+        {% endif %}
+    </p>
+    <p><strong>Contact:</strong> {{ station.contact_phone }} • {{ station.contact_email }}</p>
+    <p><strong>Opening Hours:</strong> {{ station.opening_hours }}</p>
+</div>
+
+<!-- Stats -->
+<div class="section">
+    <h2>Summary</h2>
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value">{{ units_count }}</div>
+            <div>Units</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ trays_count }}</div>
+            <div>Trays</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ tools_count }}</div>
+            <div>Tools</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ jobcards_count }}</div>
+            <div>Jobcards</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ technicians_count }}</div>
+            <div>Technicians</div>
+        </div>
+    </div>
+</div>
+
+<!-- Units Overview -->
+<div class="section">
+    <h2>Units Overview</h2>
+    {% for unit in unit_details %}
+    <div class="section">
+        <h3>{{ unit.name }}</h3>
+        <p><strong>Trays:</strong> {{ unit.trays|join:", " }}</p>
+        <p><strong>Tools Count:</strong> {{ unit.tools_count }}</p>
+        <p><strong>Jobcards Count:</strong> {{ unit.jobcards_count }}</p>
+        <p><strong>Technicians:</strong>
+            {% if unit.technicians %}
+                {{ unit.technicians|join:", " }}
+            {% else %}
+                N/A
+            {% endif %}
+        </p>
+
+        <!-- Tray Details -->
+        <h4>Tray Details:</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Tray Name</th>
+                    <th>Tools</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tray in unit.tray_details %}
+                <tr>
+                    <td>{{ tray.name }}</td>
+                    <td>{{ tray.tools|join:", " }}</td>
+                    <td>{{ tray.status }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="text-center text-small">No tray details available</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Jobcards -->
+<div class="section">
+    <h2>Jobcards</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Description</th>
+                <th>Unit</th>
+                <th>Technician</th>
+                <th>Status</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for jc in jobcards %}
+            <tr>
+                <td>{{ jc.job_id }}</td>
+                <td>{{ jc.job_title }}</td>
+                <td>{% if jc.assigned_units.first %}{{ jc.assigned_units.first.name }}{% else %}N/A{% endif %}</td>
+                <td>{% if jc.assigned_technicians.first %}{{ jc.assigned_technicians.first.username }}{% else %}N/A{% endif %}</td>
+                <td>
+                    <span class="badge
+                        {% if jc.status == 'CREATED' %} bg-gray
+                        {% elif jc.status == 'IN PROGRESS' %} bg-blue
+                        {% elif jc.status == 'COMPLETED' %} bg-green
+                        {% else %} bg-yellow {% endif %}">
+                        {{ jc.status }}
+                    </span>
+                </td>
+                <td>{{ jc.created_at|date:"d M Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-small">No jobcards found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<!-- Technicians -->
+<div class="section">
+    <h2>Technicians</h2>
+    {% if technicians %}
+    <ul>
+        {% for tech in technicians %}
+        <li>{{ tech }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>N/A</p>
+    {% endif %}
+</div>
+```
+</div>
+</body>
+</html>

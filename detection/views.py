@@ -1,12 +1,21 @@
 import json
+import smtplib
 import socket
+import ssl
+
+import certifi
+import pdfkit
 from datetime import datetime
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.mail import EmailMessage
 from django.core.paginator import Paginator
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse, HttpResponse
+from django.template.loader import render_to_string
 from django.utils import timezone
+
+from mysite import settings
 from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Unit, Aircraft, JobToolUsage, \
     JobAuditLog, JobCardNotes
 from django.contrib.auth.decorators import login_required
@@ -379,6 +388,246 @@ def centralized_service_station_dashboard(request):
         "total_tools": total_tools,
         "total_jobcards": total_jobcards,
     })
+
+def service_station_report(request, station_id):
+
+    # Get the service station
+    station = get_object_or_404(ServiceStation, id=station_id)
+
+    # Units under this station
+    units_qs = Unit.objects.filter(station=station).prefetch_related(
+        'trays',
+        'jobcards',  # Jobcards linked using related_name
+    )
+
+    unit_details = []
+    trays_count = 0
+    tools_count = 0
+    jobcards_count = 0
+
+    # To collect ALL technicians assigned across station
+    station_technicians = set()
+
+    for unit in units_qs:
+        trays = list(unit.trays.values_list('tray_name', flat=True))
+
+        unit_trays_count = unit.trays.count()
+
+        # Tools count from TrayTool
+        unit_tools_count = sum(
+            TrayTool.objects.filter(tray=tray).count()
+            for tray in unit.trays.all()
+        )
+
+        # Jobcards assigned to this unit
+        unit_jobcards_count = unit.jobcards.count()
+
+        # Technicians assigned to jobcards of this unit
+        unit_techs = set()
+        for jc in unit.jobcards.all():
+            for tech in jc.assigned_technicians.all():
+                unit_techs.add(tech.username)
+                station_technicians.add(tech.username)
+
+        # Tray Details
+        tray_details = []
+        for tray in unit.trays.all():
+            tray_tools = list(
+                tray.tray_tools.values_list('inventory__tool__tool_name', flat=True)
+            )
+
+            tray_details.append({
+                'name': tray.tray_name,
+                'tools': tray_tools,
+                'status': 'N/A'
+            })
+
+        trays_count += unit_trays_count
+        tools_count += unit_tools_count
+        jobcards_count += unit_jobcards_count
+
+        unit_details.append({
+            'name': unit.name,
+            'trays': trays,
+            'tools_count': unit_tools_count,
+            'jobcards_count': unit_jobcards_count,
+            'technicians': list(unit_techs),
+            'tray_details': tray_details
+        })
+
+    # Station-level jobcards
+    jobcards = JobCard.objects.filter(service_station=station).prefetch_related(
+        'assigned_units',
+        'assigned_technicians'
+    )
+
+    context = {
+        'station': station,
+        'units_count': units_qs.count(),
+        'trays_count': trays_count,
+        'tools_count': tools_count,
+        'jobcards_count': jobcards_count,
+
+        # Correct: show total unique technicians
+        'technicians_count': len(station_technicians),
+
+        'unit_details': unit_details,
+        'jobcards': jobcards,
+        "user": request.user,
+
+        # Pass sorted list of technicians
+        'technicians': sorted(list(station_technicians)),
+    }
+
+    return render(request, 'dashboard/service_station_report.html', context)
+
+def get_service_station_report_context(station_id):
+    station = ServiceStation.objects.get(id=station_id)
+
+    # Units for this station
+    units = Unit.objects.filter(station=station)
+
+    # Count statistics
+    units_count = units.count()
+    trays_count = Tray.objects.filter(unit__station=station).count()
+    tools_count = Inventory.objects.filter(location=station).count()
+    jobcards_count = JobCard.objects.filter(service_station=station).count()
+    technicians_count = User.objects.filter(
+        technician_jobs__service_station=station
+    ).distinct().count()
+
+    # Unit details with trays, tools, jobcards, and technicians
+    unit_details = []
+    for unit in units:
+        trays = Tray.objects.filter(unit=unit)
+
+        # Count tools assigned to this UNIT via tray tools
+        tools_in_unit = Inventory.objects.filter(traytool__tray__unit=unit).count()
+
+        jobcards_in_unit = JobCard.objects.filter(assigned_units=unit).count()
+        technicians_in_unit = User.objects.filter(
+            technician_jobs__assigned_units=unit
+        ).distinct()
+
+        tray_details = []
+        for tray in trays:
+            # Step 1: get all TrayTool relations for this tray
+            tray_tool_links = TrayTool.objects.filter(tray=tray)
+
+            # Step 2: fetch Inventory items using inventory_id, NOT id
+            tray_tools_qs = Inventory.objects.filter(
+                inventory_id__in=tray_tool_links.values_list('tool_id', flat=True)
+            ).select_related('tool')  # ensures tool FK is loaded
+
+            tray_tools_list = []
+            for t in tray_tools_qs:
+                # safely get the tool name
+                tool_name = getattr(t.tool, "name", None) \
+                            or getattr(t.tool, "tool_name", None) \
+                            or getattr(t.tool, "title", None) \
+                            or str(t.tool)
+                tray_tools_list.append(tool_name)
+
+            tray_details.append({
+                "name": tray.tray_name,
+                "tools": tray_tools_list,
+                "status": getattr(tray, 'status', 'N/A')
+            })
+
+        unit_details.append({
+            "name": unit.name,
+            "trays": [t.tray_name for t in trays],
+            "tools_count": tools_in_unit,
+            "jobcards_count": jobcards_in_unit,
+            "technicians": [
+                tech.get_full_name() or tech.username
+                for tech in technicians_in_unit
+            ],
+            "tray_details": tray_details
+        })
+
+    technicians = User.objects.filter(
+        technician_jobs__service_station=station
+    ).distinct()
+
+    jobcards = JobCard.objects.filter(
+        service_station=station
+    ).order_by('-created_at')
+
+    context = {
+        "station": station,
+        "units_count": units_count,
+        "trays_count": trays_count,
+        "tools_count": tools_count,
+        "jobcards_count": jobcards_count,
+        "technicians_count": technicians_count,
+        "unit_details": unit_details,
+        "technicians": [
+            tech.get_full_name() or tech.username for tech in technicians
+        ],
+        "jobcards": jobcards
+    }
+
+    return context
+
+
+# ----------------- PDF GENERATION -----------------
+
+def service_station_report_pdf(request, station_id):
+    station = ServiceStation.objects.get(id=station_id)
+    context = get_service_station_report_context(station_id)
+    context['for_pdf'] = True
+
+    html_string = render_to_string("dashboard/service_station_pdf.html", context)
+
+    config = pdfkit.configuration(
+        wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+    )
+
+    pdf_file = pdfkit.from_string(html_string, False, configuration=config)
+
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'attachment; filename="Service_Station_{station.name}.pdf"'
+    )
+    return response
+
+# ----------------- EMAIL WITH PDF -----------------
+from django.conf import settings
+from email.message import EmailMessage
+
+
+def service_station_report_email(request, station_id):
+    try:
+        station = ServiceStation.objects.get(id=station_id)
+
+        # Generate PDF
+        context_data = get_service_station_report_context(station_id)
+        html_string = render_to_string("dashboard/service_station_pdf.html", context_data)
+        config = pdfkit.configuration(wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
+        pdf_file = pdfkit.from_string(html_string, False, configuration=config)
+
+        # Prepare email
+        msg = EmailMessage()
+        msg['Subject'] = f"Service Station Report - {station.name}"
+        msg['From'] = settings.EMAIL_HOST_USER
+        msg['To'] = station.contact_email
+        msg.set_content(f"Hello,\n\nPlease find attached the Service Station Report for {station.name}.")
+        msg.add_attachment(pdf_file, maintype="application", subtype="pdf", filename=f"Service_Station_{station.name}.pdf")
+
+        # Send email (bypass SSL verification for dev)
+        context_ssl = ssl._create_unverified_context()
+        with smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT) as server:
+            server.ehlo()
+            server.starttls(context=context_ssl)
+            server.ehlo()
+            server.login(settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD)
+            server.send_message(msg)
+
+        return JsonResponse({"message": "Email sent successfully!"})
+
+    except Exception as e:
+        return JsonResponse({"message": f"Error sending email: {str(e)}"})
 
 def get_units_by_station(request, station_id):
     units = Unit.objects.filter(station_id=station_id)

@@ -15,6 +15,10 @@ urlpatterns = [
 
     path('dashboard/', views.dashboard, name='dashboard'),
     path("dashboard/service-stations/", views.centralized_service_station_dashboard, name="centralized_system_monitoring"),
+    path('dashboard/service-station/<int:station_id>/',views.service_station_report,name='service_station_report'),
+    path("dashboard/service-station/<int:station_id>/pdf/",views.service_station_report_pdf,name="service_station_report_pdf"),
+    path("dashboard/service-station/<int:station_id>/email/",views.service_station_report_email,name="service_station_report_email"),
+
     path("api/station/<int:station_id>/units/", views.get_units_by_station, name="api_units_by_station"),
     path("api/unit/<int:unit_id>/trays/", views.get_trays_by_unit, name="api_trays_by_unit"),
     path("api/tray/<int:tray_id>/tools/", views.get_tools_by_tray, name="api_tools_by_tray"),
