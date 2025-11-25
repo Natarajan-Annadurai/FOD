@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Station Report - {{ station.name }}</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+    <style>
+        .rotate-arrow { transition: 0.35s ease; }
+        .rotate-arrow.open { transform: rotate(180deg); }
+
+        details summary::-webkit-details-marker { display: none; }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Loading animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Card hover effects */
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Status badges */
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        /* Print styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: white !important;
+            }
+            .bg-white {
+                background: white !important;
+                box-shadow: none !important;
+                border: 1px solid #e5e5e5 !important;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen p-4 md:p-6">
+
+<div class="max-w-7xl mx-auto space-y-6 md:space-y-8">
+
+    <!-- Header -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 card-hover">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div class="flex-1">
+                <h1 class="text-2xl md:text-3xl font-bold text-gray-800">
+                    {{ station.name }} - Service Station Report
+                </h1>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'centralized_system_monitoring' %}"
+                   class="inline-flex items-center px-4 py-2 bg-gray-200 hover:bg-gray-300
+                          text-gray-700 text-sm font-medium rounded-lg shadow-sm transition no-print">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>
+                    Back
+                </a>
+                <a href="{% url 'service_station_report_pdf' station.id %}"
+                   class="inline-flex items-center px-4 py-2 bg-red-500 hover:bg-red-600
+                          text-white text-sm font-medium rounded-lg shadow-sm transition no-print">
+                    <i class="fa-solid fa-file-pdf mr-2"></i>
+                    Download PDF
+                </a>
+                <button id="print-btn"
+                   class="inline-flex items-center px-4 py-2 bg-green-500 hover:bg-green-600
+                          text-white text-sm font-medium rounded-lg shadow-sm transition no-print">
+                    <i class="fa-solid fa-print mr-2"></i>
+                    Print
+                </button>
+                <a href="javascript:void(0)"
+                   id="send-report-btn"
+                   data-station="{{ station.id }}"
+                   data-email="{{ station.contact_email }}"
+                   data-name="{{ station.manager.get_full_name|default:station.manager.username|default:'N/A' }}"
+                   class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600
+                          text-white text-sm font-medium rounded-lg shadow-sm transition no-print">
+                    <i class="fa-solid fa-envelope mr-2"></i>
+                    Email Report
+                </a>
+            </div>
+        </div>
+
+        <!-- Report Summary -->
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <div class="flex flex-wrap gap-2">
+                <span class="status-badge bg-blue-100 text-blue-800">
+                    <i class="fa-solid fa-calendar-day mr-1"></i> Generated: {{ current_date|date:"M d, Y" }}
+                </span>
+                <span class="status-badge bg-purple-100 text-purple-800">
+                    <i class="fa-solid fa-clock mr-1"></i> Last Updated: {{ station.updated_at|date:"M d, Y" }}
+                </span>
+                <span class="status-badge bg-green-100 text-green-800">
+                    <i class="fa-solid fa-chart-line mr-1"></i> Active Jobcards: {{ active_jobcards_count }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Station Info -->
+    <div class="bg-white rounded-2xl shadow p-6 border border-gray-200 card-hover">
+        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-700">
+            <i class="fa-solid fa-circle-info text-blue-600"></i> Station Details
+        </h2>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-gray-700">
+            <div class="flex flex-col">
+                <span class="font-semibold text-gray-500 text-sm">Location</span>
+                <span class="mt-1">{{ station.location }}</span>
+            </div>
+            <div class="flex flex-col">
+                <span class="font-semibold text-gray-500 text-sm">Manager</span>
+                <span class="mt-1">
+                    {% if station.manager %}
+                        {{ station.manager.get_full_name|default:station.manager.username }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </span>
+            </div>
+            <div class="flex flex-col">
+                <span class="font-semibold text-gray-500 text-sm">Contact</span>
+                <span class="mt-1">{{ station.contact_phone }} • {{ station.contact_email }}</span>
+            </div>
+            <div class="flex flex-col">
+                <span class="font-semibold text-gray-500 text-sm">Opening Hours</span>
+                <span class="mt-1">{{ station.opening_hours }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-white p-4 rounded-2xl shadow border border-gray-200 text-center card-hover">
+            <div class="text-2xl font-bold text-blue-700">{{ units_count }}</div>
+            <p class="text-sm text-gray-600">Units</p>
+            <div class="mt-2 h-1 bg-blue-200 rounded-full overflow-hidden">
+                <div class="h-full bg-blue-500" style="width: 70%"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow border border-gray-200 text-center card-hover">
+            <div class="text-2xl font-bold text-green-700">{{ trays_count }}</div>
+            <p class="text-sm text-gray-600">Trays</p>
+            <div class="mt-2 h-1 bg-green-200 rounded-full overflow-hidden">
+                <div class="h-full bg-green-500" style="width: 60%"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow border border-gray-200 text-center card-hover">
+            <div class="text-2xl font-bold text-yellow-700">{{ tools_count }}</div>
+            <p class="text-sm text-gray-600">Tools</p>
+            <div class="mt-2 h-1 bg-yellow-200 rounded-full overflow-hidden">
+                <div class="h-full bg-yellow-500" style="width: 85%"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow border border-gray-200 text-center card-hover">
+            <div class="text-2xl font-bold text-purple-700">{{ jobcards_count }}</div>
+            <p class="text-sm text-gray-600">Jobcards</p>
+            <div class="mt-2 h-1 bg-purple-200 rounded-full overflow-hidden">
+                <div class="h-full bg-purple-500" style="width: 45%"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow border border-gray-200 text-center card-hover">
+            <div class="text-2xl font-bold text-indigo-700">{{ technicians_count }}</div>
+            <p class="text-sm text-gray-600">Technicians</p>
+            <div class="mt-2 h-1 bg-indigo-200 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500" style="width: 90%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Units Overview -->
+    <div class="flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <i class="fa-solid fa-layer-group text-indigo-600"></i> Units Overview
+        </h2>
+        <div class="flex gap-2 no-print">
+            <button id="expand-all" class="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-lg transition">
+                <i class="fa-solid fa-expand mr-1"></i> Expand All
+            </button>
+            <button id="collapse-all" class="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-lg transition">
+                <i class="fa-solid fa-compress mr-1"></i> Collapse All
+            </button>
+        </div>
+    </div>
+
+    {% for unit in unit_details %}
+    <div class="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden card-hover">
+
+        <!-- Unit Header -->
+        <div onclick="toggleSection('unit-{{ forloop.counter }}', 'arrow-{{ forloop.counter }}')"
+             class="flex justify-between items-center p-5 cursor-pointer hover:bg-gray-50 transition">
+            <div class="flex items-center gap-3">
+                <h3 class="text-xl font-semibold text-gray-800">{{ unit.name }}</h3>
+                <div class="flex gap-2">
+                    <span class="status-badge bg-blue-100 text-blue-800">
+                        <i class="fa-solid fa-boxes mr-1"></i> {{ unit.trays_count }} Trays
+                    </span>
+                    <span class="status-badge bg-green-100 text-green-800">
+                        <i class="fa-solid fa-tools mr-1"></i> {{ unit.tools_count }} Tools
+                    </span>
+                    <span class="status-badge bg-purple-100 text-purple-800">
+                        <i class="fa-solid fa-file-alt mr-1"></i> {{ unit.jobcards_count }} Jobcards
+                    </span>
+                </div>
+            </div>
+            <i id="arrow-{{ forloop.counter }}" class="fas fa-chevron-down text-gray-600 rotate-arrow"></i>
+        </div>
+
+        <!-- Unit Content -->
+        <div id="unit-{{ forloop.counter }}" class="{% if not for_pdf %}hidden{% endif %} p-5 border-t border-gray-100 bg-gray-50">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700 mb-4">
+                <div class="bg-white p-4 rounded-xl border border-gray-200">
+                    <h4 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-boxes text-blue-500"></i> Trays
+                    </h4>
+                    <div class="flex flex-wrap gap-2">
+                        {% for tray in unit.trays %}
+                        <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm">{{ tray }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-gray-200">
+                    <h4 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-users text-indigo-500"></i> Technicians
+                    </h4>
+                    <div class="flex flex-wrap gap-2">
+                        {% if unit.technicians %}
+                            {% for tech in unit.technicians %}
+                            <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg text-sm">{{ tech }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="text-gray-500">N/A</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tray Details -->
+            <details class="mt-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm" {% if for_pdf %}open{% endif %}>
+                <summary class="font-medium text-gray-800 cursor-pointer flex items-center justify-between">
+                    <span>
+                        <i class="fa-solid fa-box-open text-blue-500 mr-1"></i>
+                        Tray Details
+                    </span>
+                    <i class="fa-solid fa-chevron-down text-gray-400 transition-transform duration-300"></i>
+                </summary>
+
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {% for tray in unit.tray_details %}
+                    <div class="bg-gray-50 p-3 rounded-lg border break-words">
+                        <div class="flex justify-between items-start mb-2">
+                            <strong class="text-gray-800">{{ tray.name }}</strong>
+                            <span class="status-badge
+                                {% if tray.status == 'ACTIVE' %}bg-green-100 text-green-800
+                                {% elif tray.status == 'MAINTENANCE' %}bg-yellow-100 text-yellow-800
+                                {% elif tray.status == 'INACTIVE' %}bg-red-100 text-red-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ tray.status }}
+                            </span>
+                        </div>
+                        <div class="text-sm text-gray-600">
+                            {% if tray.tools %}
+                                <span class="font-medium">Tools:</span> {{ tray.tools|join:", " }}
+                            {% else %}
+                                <span class="text-gray-500">No tools assigned</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-2 text-center py-4 text-gray-500">
+                        <i class="fa-solid fa-inbox text-3xl mb-2 opacity-50"></i>
+                        <p>No tray details available</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Jobcards -->
+    <div class="flex justify-between items-center mt-10">
+        <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <i class="fa-solid fa-file-contract text-amber-600"></i> Jobcards
+        </h2>
+        <div class="flex gap-2 no-print">
+            <div class="relative">
+                <input type="text" id="jobcard-search" placeholder="Search jobcards..."
+                       class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <i class="fa-solid fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+            </div>
+            <select id="jobcard-filter" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="all">All Status</option>
+                <option value="CREATED">Created</option>
+                <option value="IN PROGRESS">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-100 text-gray-700 text-sm">
+                    <tr>
+                        <th class="px-4 py-3 font-semibold text-left">ID</th>
+                        <th class="px-4 py-3 font-semibold text-left">Description</th>
+                        <th class="px-4 py-3 font-semibold text-left">Unit</th>
+                        <th class="px-4 py-3 font-semibold text-left">Technician</th>
+                        <th class="px-4 py-3 font-semibold text-left">Status</th>
+                        <th class="px-4 py-3 font-semibold text-left">Date</th>
+                        <th class="px-4 py-3 font-semibold text-left no-print">Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody class="text-gray-700" id="jobcard-table-body">
+                    {% for jc in jobcards %}
+                    <tr class="border-t hover:bg-gray-50 transition jobcard-row" data-status="{{ jc.status }}">
+                        <td class="px-4 py-3 font-bold text-blue-800">{{ jc.job_id }}</td>
+                        <td class="px-4 py-3">{{ jc.job_title }}</td>
+
+                        <td class="px-4 py-3">
+                            {% if jc.assigned_units.first %}
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm shadow">
+                                {{ jc.assigned_units.first.name }}
+                            </span>
+                            {% else %} N/A {% endif %}
+                        </td>
+
+                        <td class="px-4 py-3">
+                            {% if jc.assigned_technicians.first %}
+                            <span class="px-2 py-1 bg-green-100 text-green-800 rounded-lg text-sm shadow">
+                                {{ jc.assigned_technicians.first.username }}
+                            </span>
+                            {% else %} N/A {% endif %}
+                        </td>
+
+                        <td class="px-4 py-3">
+                            <span class="status-badge
+                                {% if jc.status == 'CREATED' %} bg-yellow-600
+                                {% elif jc.status == 'IN PROGRESS' %} bg-blue-600
+                                {% elif jc.status == 'COMPLETED' %} bg-green-600
+                                {% else %} bg-yellow-600 {% endif %}">
+                                {{ jc.status }}
+                            </span>
+                        </td>
+
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ jc.created_at|date:"d M Y" }}</td>
+                        <td class="px-4 py-3 text-sm no-print">
+                            <button class="text-blue-600 hover:text-blue-800 transition" title="View Details">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-gray-500">
+                            <i class="fa-solid fa-file-alt text-3xl mb-2 opacity-50"></i>
+                            <p>No jobcards found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Technicians -->
+    <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2 mt-10">
+        <i class="fa-solid fa-users-gear text-green-600"></i> Technicians
+    </h2>
+
+    <div class="bg-white rounded-2xl shadow p-6 border border-gray-200 card-hover">
+        {% if technicians %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {% for tech in technicians %}
+            <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-semibold">
+                    {{ tech|first|upper }}
+                </div>
+                <div>
+                    <p class="font-medium text-indigo-800">{{ tech }}</p>
+                    <p class="text-xs text-indigo-600">Technician</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            <i class="fa-solid fa-user-slash text-4xl mb-3 opacity-50"></i>
+            <p>No technicians assigned to this station</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-gray-500 text-sm py-6 border-t border-gray-200 mt-8">
+        <p>Service Station Report • Generated on {{ current_date|date:"F j, Y" }} • {{ station.name }}</p>
+    </div>
+
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-16 transition-transform duration-300 z-50 hidden">
+    <div class="flex items-center gap-3">
+        <i class="fa-solid fa-check-circle text-green-400"></i>
+        <span id="toast-message">Operation completed successfully</span>
+    </div>
+</div>
+
+<script>
+    // Toggle section visibility
+    function toggleSection(id, arrowId) {
+        document.getElementById(id).classList.toggle("hidden");
+        document.getElementById(arrowId).classList.toggle("open");
+    }
+
+    // Expand all units
+    document.getElementById('expand-all').addEventListener('click', function() {
+        document.querySelectorAll('[id^="unit-"]').forEach(el => {
+            el.classList.remove('hidden');
+        });
+        document.querySelectorAll('[id^="arrow-"]').forEach(el => {
+            el.classList.add('open');
+        });
+    });
+
+    // Collapse all units
+    document.getElementById('collapse-all').addEventListener('click', function() {
+        document.querySelectorAll('[id^="unit-"]').forEach(el => {
+            el.classList.add('hidden');
+        });
+        document.querySelectorAll('[id^="arrow-"]').forEach(el => {
+            el.classList.remove('open');
+        });
+    });
+
+    // Print functionality
+    document.getElementById('print-btn').addEventListener('click', function() {
+        window.print();
+    });
+
+    // Jobcard search and filter
+    const jobcardSearch = document.getElementById('jobcard-search');
+    const jobcardFilter = document.getElementById('jobcard-filter');
+    const jobcardRows = document.querySelectorAll('.jobcard-row');
+
+    function filterJobcards() {
+        const searchTerm = jobcardSearch.value.toLowerCase();
+        const statusFilter = jobcardFilter.value;
+
+        jobcardRows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const status = row.getAttribute('data-status');
+
+            const matchesSearch = text.includes(searchTerm);
+            const matchesStatus = statusFilter === 'all' || status === statusFilter;
+
+            if (matchesSearch && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    jobcardSearch.addEventListener('input', filterJobcards);
+    jobcardFilter.addEventListener('change', filterJobcards);
+
+    // Email report functionality
+    document.getElementById('send-report-btn').addEventListener('click', function() {
+        const stationId = this.dataset.station;
+        const name = this.dataset.name;
+        const email = this.dataset.email;
+
+        // Show loading state
+        const originalText = this.innerHTML;
+        this.innerHTML = '<div class="loader"></div>Sending...';
+        this.disabled = true;
+
+        fetch(`/dashboard/service-station/${stationId}/email/`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Show success toast
+            showToast(`Report sent successfully to ${name} (${email})`);
+
+            // Reset button
+            this.innerHTML = originalText;
+            this.disabled = false;
+        })
+        .catch(error => {
+            console.error(error);
+            showToast('Error sending email. Please try again.', true);
+
+            // Reset button
+            this.innerHTML = originalText;
+            this.disabled = false;
+        });
+    });
+
+    // Toast notification function
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+
+        toastMessage.textContent = message;
+
+        if (isError) {
+            toast.classList.remove('bg-gray-800');
+            toast.classList.add('bg-red-600');
+            toast.querySelector('i').className = 'fa-solid fa-exclamation-circle text-red-200';
+        } else {
+            toast.classList.remove('bg-red-600');
+            toast.classList.add('bg-gray-800');
+            toast.querySelector('i').className = 'fa-solid fa-check-circle text-green-400';
+        }
+
+        toast.classList.remove('hidden');
+        toast.classList.remove('translate-y-16');
+        toast.classList.add('translate-y-0');
+
+        setTimeout(() => {
+            toast.classList.remove('translate-y-0');
+            toast.classList.add('translate-y-16');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 300);
+        }, 3000);
+    }
+
+    // Add animation to stats cards on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const statsCards = document.querySelectorAll('.grid > div.bg-white');
+        statsCards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.classList.add('animate-fade-in-up');
+        });
+    });
+</script>
+
+</body>
+</html>

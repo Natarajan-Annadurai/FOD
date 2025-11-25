@@ -82,6 +82,9 @@ class ServiceStation(models.Model):
     station_id = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=150)
     location = models.CharField(max_length=255, blank=True, null=True)
+    contact_person = models.CharField(max_length=150, blank=True, null=True)
+    contact_email = models.EmailField(blank=True, null=True)
+    opening_hours = models.CharField(max_length=150, blank=True, null=True)
     manager = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name='managed_stations'
     )
@@ -97,7 +100,6 @@ class ServiceStation(models.Model):
 
     def __str__(self):
         return f"{self.station_id} - {self.name}"
-
 
 class Unit(models.Model):
     station = models.ForeignKey(ServiceStation, on_delete=models.CASCADE, related_name='units')
