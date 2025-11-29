@@ -395,10 +395,14 @@ def service_station_report(request, station_id):
     station = get_object_or_404(ServiceStation, id=station_id)
 
     # Units under this station
-    units_qs = Unit.objects.filter(station=station).prefetch_related(
+    units_qs = Unit.objects.filter(station=station_id).prefetch_related(
         'trays',
-        'jobcards',  # Jobcards linked using related_name
+        'jobcards',
     )
+
+    active_jobcards_count = JobCard.objects.filter(
+        service_station=station
+    ).exclude(status__iexact='closed').count()
 
     unit_details = []
     trays_count = 0
@@ -477,6 +481,7 @@ def service_station_report(request, station_id):
 
         # Pass sorted list of technicians
         'technicians': sorted(list(station_technicians)),
+        'active_jobcards_count': active_jobcards_count,
     }
 
     return render(request, 'dashboard/service_station_report.html', context)
