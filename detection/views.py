@@ -659,80 +659,134 @@ def get_trays_by_unit(request, unit_id):
     for t in trays:
         tray_tools = TrayTool.objects.filter(tray=t)
 
-        available_count = 0
-        inuse_count = 0
+        total_available = 0
+        total_inuse = 0
 
         for tt in tray_tools:
-            # Only events for this tray and tool
-            last_event = (
-                ToolEventTracking.objects
-                .filter(tray_id=t.tray_id, tool_id=tt.tool_id)
-                .order_by('-timestamp')
-                .first()
-            )
+            tool_id = tt.tool_id
+            assigned_qty = tt.assigned_quantity
 
-            status = "AVAILABLE"
-            if last_event:
-                ev = last_event.event.lower()
-                if ev == "tool_issued":
-                    status = "IN-USE"
-                elif ev == "tool_returned":
-                    status = "AVAILABLE"
-                else:
-                    status = ev.upper()
+            # Count events properly
+            issued = ToolEventTracking.objects.filter(
+                tray_id=t.tray_id,
+                tool_id=tool_id,
+                event__iexact="tool_issued"
+            ).count()
 
-            if status == "AVAILABLE":
-                available_count += tt.assigned_quantity
-            elif status == "IN-USE":
-                inuse_count += tt.assigned_quantity
+            returned = ToolEventTracking.objects.filter(
+                tray_id=t.tray_id,
+                tool_id=tool_id,
+                event__iexact="tool_returned"
+            ).count()
 
-        total_tools = sum(tt.assigned_quantity for tt in tray_tools)
+            # Correct count
+            inuse = min(max(issued - returned, 0), assigned_qty)
+            available = max(assigned_qty - inuse, 0)
+
+            total_inuse += inuse
+            total_available += available
+
+        total_tools = total_inuse + total_available
 
         data.append({
             "tray_id": t.id,
             "tray_id_original": t.tray_id,
             "tray_name": t.tray_name,
             "total_tools": total_tools,
-            "available_tools": available_count,
-            "inuse_tools": inuse_count,
+            "available_tools": total_available,
+            "inuse_tools": total_inuse,
         })
 
     return JsonResponse(data, safe=False)
 
 def get_tools_by_tray(request, tray_id):
-    # Fetch only TrayTool entries for this tray
-    tray_tools = TrayTool.objects.filter(tray_id=tray_id, assigned_quantity__gt=0).select_related('inventory',
-                                                                                                  'inventory__tool')
+
+    # Try both with and without 'T' prefix
+    tray_id_variations = [tray_id]
+
+    # If tray_id doesn't start with 'T', try adding it
+    if not str(tray_id).startswith('T'):
+        tray_id_with_t = f"T{tray_id:0>3}"  # Format as T032 if tray_id is 32
+        tray_id_variations.append(tray_id_with_t)
+    # If tray_id starts with 'T', try removing it
+    elif str(tray_id).startswith('T'):
+        tray_id_without_t = tray_id.lstrip('T')
+        tray_id_variations.append(tray_id_without_t)
+
+    # Check which variation exists in ToolEventTracking
+    existing_tray_id = None
+    for variation in tray_id_variations:
+        exists = ToolEventTracking.objects.filter(tray_id=variation).exists()
+        if exists:
+            existing_tray_id = variation
+            break
+
+    if existing_tray_id:
+        event_tray_id = existing_tray_id
+    else:
+        event_tray_id = tray_id  # Use original for queries, will return 0 results
+
+    tray_tools = TrayTool.objects.filter(tray_id=tray_id).select_related(
+        'inventory', 'inventory__tool'
+    )
+
     data = []
 
     for t in tray_tools:
-        tool_obj = t.inventory.tool if t.inventory else None
+        inv = t.inventory
+        tool_obj = inv.tool if inv else None
+
         tool_name = tool_obj.tool_name if tool_obj else "Unknown"
+        tool_serial = tool_obj.tool_id if tool_obj else None
+        total_assigned_qty = t.assigned_quantity
 
-        # Fetch last event for this tool in this tray
-        last_event = (
-            ToolEventTracking.objects
-            .filter(tool_id=t.inventory.tool.id, tray_id=tray_id)
-            .order_by('-timestamp')
-            .first()
-        )
+        issued_count = returned_count = 0
 
-        # Determine status
-        status = "AVAILABLE"
-        if last_event:
-            ev = last_event.event.upper()
-            if ev in ["TOOL_ISSUED", "ISSUED"]:
-                status = "IN-USE"
-            elif ev in ["RETURNED", "TOOL_RETURNED"]:
-                status = "AVAILABLE"
+        if tool_serial:
+            # Query events using the correct tray_id
+            events_for_tool = ToolEventTracking.objects.filter(
+                tray_id=event_tray_id,
+                tool_id=tool_serial
+            )
+
+            if events_for_tool.exists():
+                for ev in events_for_tool:
+                    print(f"  ID {ev.id}: event='{ev.event}', "
+                          f"tool_id='{ev.tool_id}', tray_id='{ev.tray_id}', "
+                          f"timestamp={ev.timestamp}")
+
+                # Count events
+                issued_count = events_for_tool.filter(event='tool_Issued').count()
+                returned_count = events_for_tool.filter(event='tool_Returned').count()
+            else:
+                print(f"No events found for tool '{tool_serial}' in tray '{event_tray_id}'")
+
+        # Compute stock
+        in_use_count = min(max(issued_count - returned_count, 0), total_assigned_qty)
+        available_count = max(total_assigned_qty - in_use_count, 0)
+
+        status_parts = []
+        if in_use_count > 0:
+            status_parts.append(f"IN-USE ({in_use_count})")
+        if available_count > 0:
+            status_parts.append(f"AVAILABLE ({available_count})")
+
+        status = " ".join(status_parts) if status_parts else "UNASSIGNED"
 
         data.append({
             "name": tool_name,
-            "tool_id": t.tool_id,
+            "tool_id": tool_serial,
             "tray_name": t.tray.tray_name,
             "status": status,
-            "quantity": t.assigned_quantity,  # optional
+            "assigned": total_assigned_qty,
+            "issued": issued_count,
+            "returned": returned_count,
+            "in_use": in_use_count,
+            "available": available_count,
         })
+
+    for item in data:
+        print(f"  {item['name']}: {item['status']}")
 
     return JsonResponse(data, safe=False)
 
