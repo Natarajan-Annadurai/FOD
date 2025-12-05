@@ -1,11 +1,31 @@
+from django.shortcuts import redirect
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
 from . import views
 
+# test report,
+# security
+#
+#
+#
+# camera mgt,
+# inventroy mgt,
+# access mgt,
+# tray mgt
+#
+#
+# user login autheticated by usenarame and pssword
+# user try to login with 3 failed attempt automatically locked and relase after 5 mintues
+# session auto logout
+# user session only allowed to current machine only even connected same lan
+# If you want, I can also combine this IP restriction + failed-login lockout + auto logout into a single secure login system so everything works together.
+
 
 urlpatterns = [
     path('', views.login_view, name='login'),
+    path('dashboard/', views.dashboard_view, name='dashboard'),
+
     path("add-user/", views.add_user, name="add_user"),
     path('create-role/', views.create_role, name='create_role'),
     path('users/manage/', views.manage_users, name='manage_users'),
@@ -13,7 +33,6 @@ urlpatterns = [
     path('edit-user/', views.edit_user, name='edit_user'),
     path("delete-user/<int:user_id>/", views.delete_user, name="delete_user"),
 
-    path('dashboard/', views.dashboard, name='dashboard'),
     path("dashboard/service-stations/", views.centralized_service_station_dashboard, name="centralized_system_monitoring"),
     path('dashboard/service-station/<int:station_id>/',views.service_station_report,name='service_station_report'),
     path("dashboard/service-station/<int:station_id>/pdf/",views.service_station_report_pdf,name="service_station_report_pdf"),
@@ -30,6 +49,7 @@ urlpatterns = [
     path('tool_creation/', views.tool_creation_view, name='tool_creation'),
     path('tool_creation/delete/<int:id>/', views.tool_delete, name='tool_delete'),
     path('tool_purchase/', views.tool_purchase_view, name='tool_purchase'),
+
     path('service-stations/create/', views.create_service_station, name='create_service_station'),
     path('service-station/<int:pk>/edit/', views.edit_service_station, name='edit_service_station'),
     path('service-station/<int:pk>/delete/', views.delete_service_station, name='delete_service_station'),
@@ -42,6 +62,7 @@ urlpatterns = [
     path('trays/<int:tray_id>/assign-tools/', views.assign_tools, name='assign_tools'),
     path('trays/<int:tray_id>/assigned-tools/', views.assigned_tools_list, name='assigned_tools_list'),
     path('assigned-tools/', views.global_assigned_tools, name='global_assigned_tools'),
+
     path('users/assigned/', views.user_assigned_list, name='user_assigned_list'),
     path('inventory/update/', views.inventory_update_api, name='inventory_update_api'),
     path('api/detections/', views.receive_detections, name='receive_detections'),

@@ -13,10 +13,19 @@
     <h1 class="text-2xl font-semibold">
       Assign Tools to Tray: {{ tray.tray_name }}
     </h1>
-    <div class="flex gap-3">
-      <a href="{% url 'assigned_tools_list' tray_id=tray.id %}"
-         class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-         View Assigned Tools
+    <div class="flex flex-wrap gap-3 mt-4">
+      <!-- Assign Tools Button -->
+      <button type="submit" class="px-5 py-2 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
+        Assign Tools
+      </button>
+      <a href="{% url 'service_station_list' %}" class="px-5 py-2 bg-red-600 text-white font-semibold rounded shadow hover:bg-red-700 transition">
+        Service Station
+      </a>
+      <a href="{% url 'assigned_tools_list' tray_id=tray.id %}" class="px-5 py-2 bg-purple-600 text-white font-semibold rounded shadow hover:bg-purple-700 transition">
+        View Assigned Tools
+      </a>
+      <a href="{% url 'create_tray' unit_id=tray.unit.id %}" class="px-5 py-2 bg-gray-600 text-white font-semibold rounded shadow hover:bg-gray-700 transition">
+        Back
       </a>
     </div>
   </div>
@@ -90,19 +99,6 @@
         {% endfor %}
       </tbody>
     </table>
-
-    <button type="submit" class="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
-      Assign Tools
-    </button>
-    <a href="{% url 'service_station_list' %}"
-         class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">
-        Service Station
-    </a>
-
-    <a href="{% url 'create_tray' unit_id=tray.unit.id %}"
-       class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-        Back
-    </a>
 
   </form>
 </div>

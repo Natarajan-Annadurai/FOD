@@ -24,22 +24,50 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from .models import ToolEventTracking
 from django.views.decorators.csrf import csrf_exempt
+from django.core.cache import cache
 
+MAX_FAILED_ATTEMPTS = 3
+LOCKOUT_TIME = 1 * 60  # 5 minutes in seconds
 
 @csrf_exempt
 def login_view(request):
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
+
+        # Check if user is locked
+        lockout_key = f'lockout_{username}'
+        failed_key = f'failed_{username}'
+
+        if cache.get(lockout_key):
+            messages.error(request, 'Account locked due to too many failed login attempts. Try again after 5 minutes.')
+            return render(request, 'login.html')
+
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
+            # Reset failed attempts on successful login
+            cache.delete(failed_key)
             login(request, user)
             return redirect('dashboard')
         else:
-            messages.error(request, 'Invalid username or password')
+            # Increment failed attempts
+            failed_attempts = cache.get(failed_key, 0) + 1
+            cache.set(failed_key, failed_attempts, LOCKOUT_TIME)
+
+            if failed_attempts >= MAX_FAILED_ATTEMPTS:
+                cache.set(lockout_key, True, LOCKOUT_TIME)
+                messages.error(request,
+                               'Account locked due to too many failed login attempts. Try again after 15 minutes.')
+            else:
+                remaining_attempts = MAX_FAILED_ATTEMPTS - failed_attempts
+                messages.error(request, f'Invalid credentials. {remaining_attempts} attempts left.')
 
     return render(request, 'login.html')
+
+@login_required
+def dashboard_view(request):
+    return render(request, 'dashboard.html')
 
 def logout_view(request):
     logout(request)
@@ -332,11 +360,6 @@ def delete_user(request, user_id):
     messages.success(request, f"User {username} deleted successfully!")
     return redirect("manage_users")
 
-@login_required
-def dashboard(request):
-    return render(request, 'dashboard.html')
-
-
 def centralized_service_station_dashboard(request):
     service_stations = ServiceStation.objects.all()
 
@@ -440,10 +463,19 @@ def service_station_report(request, station_id):
                 tray.tray_tools.values_list('inventory__tool__tool_name', flat=True)
             )
 
+            # Clean None values
+            tray_tools = [tool for tool in tray_tools if tool]
+
+            # Set status based on tools
+            if tray_tools:
+                tray_status = "AVAILABLE"
+            else:
+                tray_status = getattr(tray, 'status', 'N/A')
+
             tray_details.append({
                 'name': tray.tray_name,
                 'tools': tray_tools,
-                'status': 'N/A'
+                'status': tray_status  # ← UPDATED
             })
 
         trays_count += unit_trays_count
@@ -486,6 +518,7 @@ def service_station_report(request, station_id):
 
     return render(request, 'dashboard/service_station_report.html', context)
 
+
 def get_service_station_report_context(station_id):
     station = ServiceStation.objects.get(id=station_id)
 
@@ -506,8 +539,11 @@ def get_service_station_report_context(station_id):
     for unit in units:
         trays = Tray.objects.filter(unit=unit)
 
+        # Get tray names
+        tray_names = [t.tray_name for t in trays]
+
         # Count tools assigned to this UNIT via tray tools
-        tools_in_unit = Inventory.objects.filter(traytool__tray__unit=unit).count()
+        tools_in_unit = TrayTool.objects.filter(tray__unit=unit).count()
 
         jobcards_in_unit = JobCard.objects.filter(assigned_units=unit).count()
         technicians_in_unit = User.objects.filter(
@@ -516,32 +552,30 @@ def get_service_station_report_context(station_id):
 
         tray_details = []
         for tray in trays:
-            # Step 1: get all TrayTool relations for this tray
-            tray_tool_links = TrayTool.objects.filter(tray=tray)
+            # Get tool names
+            tray_tools = list(
+                tray.tray_tools.values_list('inventory__tool__tool_name', flat=True)
+            )
 
-            # Step 2: fetch Inventory items using inventory_id, NOT id
-            tray_tools_qs = Inventory.objects.filter(
-                inventory_id__in=tray_tool_links.values_list('tool_id', flat=True)
-            ).select_related('tool')  # ensures tool FK is loaded
+            # Clean up None values
+            tray_tools = [tool for tool in tray_tools if tool]
 
-            tray_tools_list = []
-            for t in tray_tools_qs:
-                # safely get the tool name
-                tool_name = getattr(t.tool, "name", None) \
-                            or getattr(t.tool, "tool_name", None) \
-                            or getattr(t.tool, "title", None) \
-                            or str(t.tool)
-                tray_tools_list.append(tool_name)
+            # Determine status based on whether tools exist
+            if tray_tools:  # If there are tools
+                tray_status = "AVAILABLE"
+            else:
+                tray_status = getattr(tray, 'status', 'N/A')
 
             tray_details.append({
                 "name": tray.tray_name,
-                "tools": tray_tools_list,
-                "status": getattr(tray, 'status', 'N/A')
+                "tools": tray_tools,
+                "status": tray_status
             })
 
         unit_details.append({
             "name": unit.name,
-            "trays": [t.tray_name for t in trays],
+            "trays": tray_names,
+            "trays_count": trays.count(),
             "tools_count": tools_in_unit,
             "jobcards_count": jobcards_in_unit,
             "technicians": [
@@ -559,6 +593,8 @@ def get_service_station_report_context(station_id):
         service_station=station
     ).order_by('-created_at')
 
+    from django.utils.timezone import now
+
     context = {
         "station": station,
         "units_count": units_count,
@@ -570,11 +606,12 @@ def get_service_station_report_context(station_id):
         "technicians": [
             tech.get_full_name() or tech.username for tech in technicians
         ],
-        "jobcards": jobcards
+        "jobcards": jobcards,
+        "current_date": now(),
+        "for_pdf": True
     }
 
     return context
-
 
 # ----------------- PDF GENERATION -----------------
 
@@ -1194,11 +1231,33 @@ def create_unit(request, station_id):
     }
     return render(request, 'create_unit.html', context)
 
-
 @login_required
 def delete_unit(request, station_id, unit_id):
     station = get_object_or_404(ServiceStation, id=station_id)
     unit = get_object_or_404(Unit, id=unit_id, station=station)
+
+    # 1️⃣ Check if any trays exist under this unit
+    has_trays = Tray.objects.filter(unit=unit).exists()
+    if has_trays:
+        messages.error(request,
+            "Cannot delete this Unit. Trays are assigned under this unit. Delete them first.")
+        return redirect('create_unit', station_id=station.id)
+
+    # 2️⃣ Check if unit is assigned to any JobCards
+    is_assigned_jobcard = JobCard.objects.filter(assigned_units=unit).exists()
+    if is_assigned_jobcard:
+        messages.error(request,
+            "Unit cannot be deleted. It is assigned to one or more Job Cards.")
+        return redirect('create_unit', station_id=station.id)
+
+    # 3️⃣ Check if unit is involved in any Tool Usage
+    used_in_tool_usage = JobToolUsage.objects.filter(unit=unit).exists()
+    if used_in_tool_usage:
+        messages.error(request,
+            "Unit cannot be deleted. It is linked to tool usage history.")
+        return redirect('create_unit', station_id=station.id)
+
+    # 4️⃣ Safe to delete
     unit.delete()
     messages.success(request, "Unit deleted successfully.")
     return redirect('create_unit', station_id=station.id)
@@ -1228,6 +1287,13 @@ def edit_service_station(request, pk):
 @login_required
 def delete_service_station(request, pk):
     station = get_object_or_404(ServiceStation, pk=pk)
+
+    is_assigned = JobCard.objects.filter(service_station=station).exists()
+
+    if is_assigned:
+        messages.error(request, "Cannot delete. This service station is assigned to one or more job cards.")
+        return redirect('service_station_list')
+
     station.delete()
     messages.success(request, "Service station deleted successfully.")
     return redirect('service_station_list')
@@ -1297,9 +1363,27 @@ def edit_tray(request, tray_id):
 @login_required
 def delete_tray(request, tray_id):
     tray = get_object_or_404(Tray, id=tray_id)
-    unit_id = tray.unit.id
+
+    # Check if any tools are assigned in TrayTool
+    has_tools = TrayTool.objects.filter(tray=tray).exists()
+
+    if has_tools:
+        messages.error(request,
+            "Cannot delete this tray. Tools are assigned to this tray. Remove them first.")
+        return redirect('create_tray', unit_id=tray.unit.id)
+
+    # Check if tray is linked with any JobCard (via JobToolUsage)
+    in_job_usage = JobToolUsage.objects.filter(tray=tray).exists()
+
+    if in_job_usage:
+        messages.error(request,
+            "Tray cannot be deleted. It is associated with one or more Job Cards.")
+        return redirect('create_tray', unit_id=tray.unit.id)
+
+    # Safe to delete
     tray.delete()
-    return redirect('create_tray', unit_id=unit_id)
+    messages.success(request, "Tray deleted successfully.")
+    return redirect('create_tray', unit_id=tray.unit.id)
 
 from django.db.models import Q, F, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
@@ -1856,6 +1940,13 @@ def aircraft_edit(request, pk):
 
 def aircraft_delete(request, pk):
     aircraft = get_object_or_404(Aircraft, pk=pk)
+
+    jobcard_exists = JobCard.objects.filter(aircraft=aircraft).exists()
+
+    if jobcard_exists:
+        messages.error(request, "Cannot delete. This aircraft is assigned to one or more job cards.")
+        return redirect('aircraft_list')
+
     aircraft.delete()
     messages.success(request, "Aircraft deleted successfully.")
     return redirect('aircraft_list')

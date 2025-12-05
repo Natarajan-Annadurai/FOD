@@ -1,7 +1,18 @@
 from datetime import timezone
-
+from datetime import timedelta
 from django.db import models
 from django.contrib.auth.models import User
+
+class LoginAttempt(models.Model):
+    ip_address = models.GenericIPAddressField()
+    failed_count = models.IntegerField(default=0)
+    last_attempt = models.DateTimeField(auto_now=True)
+
+    def is_blocked(self):
+        # Block for 15 minutes after 5 failed attempts
+        if self.failed_count >= 5:
+            return self.last_attempt + timedelta(minutes=15) > timezone.now()
+        return False
 
 class ProfileInformation(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')

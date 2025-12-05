@@ -1,0 +1,31 @@
+# # manaully check the package version
+pip freeze
+pip freeze > requirements.txt
+
+-- alternate
+vulnerability_checks/package_version.py
+project_environment_report.txt
+
+# dead code/un used code
+vulture "C:\Users\System 8\FOD" --min-confidence 60 --exclude "C:\Users\System 8\FOD\venv" > dead_code_report.txt
+
+# Dependency Vulnerability Check
+pip install audit
+pip-audit --progress-spinner off --json > vulnerability_report.js
+# With local virtual environment
+pip-audit --requirement requirements.txt --environment venv
+
+
+# Dependency Vulnerability Check - using safetysafety check --full-report > safety_report.txt
+
+# Code Vulnerability Check (Static Analysis) Code Security Scanning
+pip install bandit
+bandit -r C:\Users\System 8\FOD\Edge-Unit-FOD -f json -o code_vuln_report.json
+
+# Dependency Graph
+pip install pipdeptree
+pipdeptree --warn silence > dependency_tree.txt
+
+# License Compliance
+pip install pip-licenses
+pip-licenses --format=json > licenses.json
