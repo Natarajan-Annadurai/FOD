@@ -191,7 +191,9 @@
   </div>
 
 <script>
-  // Function to generate Tool ID like TL-20251029-6F3A
+// ---------------------------
+// Generate Tool ID
+// ---------------------------
 function generateToolId() {
     const now = new Date();
     const date = now.toISOString().slice(0,10).replace(/-/g,'');
@@ -199,26 +201,50 @@ function generateToolId() {
     return `TL-${date}-${rand}`;
 }
 
-// Set Tool ID on page load
+// Set Tool ID on Page Load
 document.addEventListener('DOMContentLoaded', () => {
     const toolIdInput = document.getElementById('tool_id');
     if(!toolIdInput.value) toolIdInput.value = generateToolId();
 });
 
-// Regenerate ID on "Generate" button click
-document.getElementById('regenId').addEventListener('click', () => {
+// Generate Button
+document.getElementById('regenId').onclick = () => {
     document.getElementById('tool_id').value = generateToolId();
-});
+};
 
-// Form submission
+
+// ---------------------------
+// RESET FORM
+// ---------------------------
+document.getElementById('resetBtn').onclick = () => {
+    document.getElementById('toolForm').reset();
+    document.getElementById('tool_id').value = generateToolId();
+    document.getElementById('internal_id').value = '';
+
+    // Enable Generate button
+    const regenBtn = document.getElementById('regenId');
+    regenBtn.disabled = false;
+    regenBtn.classList.remove("opacity-50", "cursor-not-allowed");
+};
+
+
+// ---------------------------
+// SAVE TOOL (AJAX POST)
+// ---------------------------
 document.getElementById('toolForm').addEventListener('submit', function(e){
     e.preventDefault();
     const formData = new FormData(this);
+
     fetch("{% url 'tool_creation' %}", {
         method:'POST',
         body: formData,
-        headers:{'X-CSRFToken':'{{ csrf_token }}','X-Requested-With':'XMLHttpRequest'}
-    }).then(res => res.json()).then(data => {
+        headers:{
+            'X-CSRFToken':'{{ csrf_token }}',
+            'X-Requested-With':'XMLHttpRequest'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
         if(data.status=='success'){
             alert('Tool saved successfully');
             location.reload();
@@ -228,89 +254,73 @@ document.getElementById('toolForm').addEventListener('submit', function(e){
     });
 });
 
-function generateToolId() {
-  const now = new Date();
-  const date = now.toISOString().slice(0,10).replace(/-/g,'');
-  const rand = Math.random().toString(36).slice(2,6).toUpperCase();
-  return `TL-${date}-${rand}`;
-}
 
-document.getElementById('regenId').onclick = () => {
-  document.getElementById('tool_id').value = generateToolId();
-};
-
-document.getElementById('resetBtn').onclick = () => {
-  document.getElementById('toolForm').reset();
-  document.getElementById('tool_id').value = generateToolId();
-  document.getElementById('internal_id').value = '';
-};
-
-function attachActions(){
-  document.querySelectorAll('.deleteBtn').forEach(btn => {
+// ---------------------------
+// EDIT TOOL (Disable Generate Button)
+// ---------------------------
+document.querySelectorAll('.editBtn').forEach(btn => {
     btn.onclick = function(){
-      if(confirm('Delete this tool?')){
-        fetch(`/tool_creation/delete/${btn.dataset.id}/`,{
-          method:'POST',
-          headers:{
-            'X-CSRFToken':'{{ csrf_token }}',
-            'X-Requested-With':'XMLHttpRequest'
-          }
-        }).then(res=>res.json()).then(data=>{
-          if(data.status=='success') location.reload();
-        });
-      }
-    }
-  });
+        const row = btn.closest('tr');
 
-  document.querySelectorAll('.editBtn').forEach(btn => {
-    btn.onclick = function(){
-      const row = btn.closest('tr');
-      document.getElementById('internal_id').value = btn.dataset.id;
-      document.getElementById('tool_id').value = row.children[1].innerText;
-      document.getElementById('tool_name').value = row.children[2].innerText;
-      document.getElementById('brand').value = row.children[3].innerText;
-      document.getElementById('part_number').value = row.children[4].innerText;
-      document.getElementById('tool_type').value = row.children[5].innerText;
-      document.getElementById('calibration').value = row.children[6].innerText==='-'?'':row.children[6].innerText;
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
-  });
-}
+        document.getElementById('internal_id').value = btn.dataset.id;
+        document.getElementById('tool_id').value = row.dataset.toolId;
+        document.getElementById('tool_name').value = row.dataset.toolName;
+        document.getElementById('brand').value = row.dataset.brand;
+        document.getElementById('part_number').value = row.dataset.partNumber;
+        document.getElementById('tool_type').value = row.dataset.toolType;
+        document.getElementById('remarks').value = row.dataset.remarks || '';
 
-attachActions();
+        // ❗ Disable Generate button during Edit
+        const regenBtn = document.getElementById('regenId');
+        regenBtn.disabled = true;
+        regenBtn.classList.add("opacity-50", "cursor-not-allowed");
 
-document.getElementById('toolForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  const formData = new FormData(this);
-  fetch("{% url 'tool_creation' %}",{
-    method:'POST',
-    body: formData,
-    headers:{'X-CSRFToken':'{{ csrf_token }}','X-Requested-With':'XMLHttpRequest'}
-  }).then(res=>res.json()).then(data=>{
-    if(data.status=='success'){
-      alert('Tool saved successfully');
-      location.reload();
-    } else {
-      alert('Error: '+JSON.stringify(data.errors));
-    }
-  });
+        window.scrollTo({top:0, behavior:'smooth'});
+    };
 });
 
-  // Search filter for tool table
+
+// ---------------------------
+// DELETE TOOL
+// ---------------------------
+document.querySelectorAll('.deleteBtn').forEach(btn => {
+    btn.onclick = function(){
+        if(!confirm("Delete this tool?")) return;
+
+        fetch(`/tool_creation/delete/${btn.dataset.id}/`,{
+            method:'POST',
+            headers:{
+                'X-CSRFToken':'{{ csrf_token }}',
+                'X-Requested-With':'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status=='success'){
+                location.reload();
+            }
+        });
+    };
+});
+
+
+// ---------------------------
+// SEARCH FILTER
+// ---------------------------
 function filterTools() {
     const query = document.getElementById('search').value.toLowerCase();
     const rows = document.querySelectorAll('#toolTableBody tr');
 
     rows.forEach(row => {
-        // Skip empty rows (e.g., colspan="8")
-        if(row.querySelector('td[colspan]')) return;
+        if(row.querySelector('td[colspan]')) return; // skip empty rows
 
         const toolId = row.children[1].innerText.toLowerCase();
         const toolName = row.children[2].innerText.toLowerCase();
         const brand = row.children[3].innerText.toLowerCase();
         const partNumber = row.children[4].innerText.toLowerCase();
 
-        if(toolId.includes(query) || toolName.includes(query) || brand.includes(query) || partNumber.includes(query)){
+        if(toolId.includes(query) || toolName.includes(query) ||
+           brand.includes(query) || partNumber.includes(query)){
             row.style.display = '';
         } else {
             row.style.display = 'none';
@@ -318,104 +328,72 @@ function filterTools() {
     });
 }
 
-// Listen for search input
 document.getElementById('search').addEventListener('input', filterTools);
 
-// Re-apply search after table updates
-function reloadTableAndAttachActions() {
-    attachActions();
-    filterTools(); // keep filtered results even after save/delete
-}
 
-// Open modal when Purchase button is clicked
+// ---------------------------
+// PURCHASE MODAL
+// ---------------------------
 document.querySelectorAll('.purchaseBtn').forEach(btn => {
     btn.onclick = () => {
         const modal = document.getElementById('purchaseModal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
 
-        // Fill tool info
         document.getElementById('modal_tool_id').value = btn.dataset.id;
         document.getElementById('modal_tool_name').value = btn.dataset.name;
     };
 });
 
-// Close modal
 document.getElementById('closeModal').onclick = () => {
     const modal = document.getElementById('purchaseModal');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
 };
 
-// 🧮 Auto-calculate Purchase Cost (quantity * unit cost)
-const quantityInput = document.querySelector('input[name="quantity"]');
+
+// ---------------------------
+// PURCHASE COST AUTO CALC
+// ---------------------------
+const qtyInput = document.querySelector('input[name="quantity"]');
 const unitCostInput = document.querySelector('input[name="unit_cost"]');
 const purchaseCostInput = document.querySelector('input[name="purchase_cost"]');
 
 function calculatePurchaseCost() {
-    const qty = parseFloat(quantityInput.value) || 0;
-    const unitCost = parseFloat(unitCostInput.value) || 0;
-    const total = qty * unitCost;
-    purchaseCostInput.value = total.toFixed(2);
+    const qty = parseFloat(qtyInput.value) || 0;
+    const unit = parseFloat(unitCostInput.value) || 0;
+    purchaseCostInput.value = (qty * unit).toFixed(2);
 }
 
-quantityInput.addEventListener('input', calculatePurchaseCost);
+qtyInput.addEventListener('input', calculatePurchaseCost);
 unitCostInput.addEventListener('input', calculatePurchaseCost);
 
-// Submit purchase form via AJAX
+
+// ---------------------------
+// SAVE PURCHASE
+// ---------------------------
 document.getElementById('purchaseForm').addEventListener('submit', function(e){
     e.preventDefault();
     const formData = new FormData(this);
 
     fetch("{% url 'tool_purchase' %}", {
-        method: 'POST',
+        method:'POST',
         body: formData,
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'X-Requested-With': 'XMLHttpRequest'
+        headers:{
+            'X-CSRFToken':'{{ csrf_token }}',
+            'X-Requested-With':'XMLHttpRequest'
         }
-    }).then(res => res.json()).then(data => {
+    })
+    .then(res => res.json())
+    .then(data => {
         if(data.status=='success'){
             alert('Purchase saved successfully');
             location.reload();
         } else {
-            alert('Error saving purchase');
+            alert("Error saving purchase");
         }
     });
 });
-
-document.querySelectorAll('.deleteBtn').forEach(btn => {
-  btn.onclick = function(){
-    if(confirm('Delete this tool?')){
-      fetch(`/tool_creation/delete/${btn.dataset.id}/`,{
-        method:'POST',
-        headers:{
-          'X-CSRFToken':'{{ csrf_token }}',
-          'X-Requested-With':'XMLHttpRequest'
-        }
-      }).then(res=>res.json()).then(data=>{
-        if(data.status=='success') location.reload();
-      });
-    }
-  }
-});
-
-document.querySelectorAll('.editBtn').forEach(btn => {
-  btn.onclick = function(){
-    const row = btn.closest('tr');
-    document.getElementById('internal_id').value = btn.dataset.id;
-    document.getElementById('tool_id').value = row.dataset.toolId;
-    document.getElementById('tool_name').value = row.dataset.toolName;
-    document.getElementById('brand').value = row.dataset.brand;
-    document.getElementById('part_number').value = row.dataset.partNumber;
-    document.getElementById('tool_type').value = row.dataset.toolType;
-    document.getElementById('remarks').value = row.dataset.remarks || '';
-
-    // Scroll to form
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-});
 </script>
-
 </body>
 </html>

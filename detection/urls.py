@@ -1,26 +1,12 @@
-from django.shortcuts import redirect
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
 from . import views
 
-# test report,
-# security
-#
-#
-#
 # camera mgt,
 # inventroy mgt,
 # access mgt,
 # tray mgt
-#
-#
-# user login autheticated by usenarame and pssword
-# user try to login with 3 failed attempt automatically locked and relase after 5 mintues
-# session auto logout
-# user session only allowed to current machine only even connected same lan
-# If you want, I can also combine this IP restriction + failed-login lockout + auto logout into a single secure login system so everything works together.
-
 
 urlpatterns = [
     path('', views.login_view, name='login'),

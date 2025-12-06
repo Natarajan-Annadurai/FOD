@@ -81,6 +81,34 @@
              placeholder="🔍 Search by Tool Name, ID, or Location..."
              class="w-full sm:w-1/3 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 shadow-sm mb-2 sm:mb-0"
              onkeyup="filterTable()">
+
+        <!-- SUMMARY COUNTS -->
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6 text-center">
+          <div class="bg-white rounded-lg shadow p-4">
+            <p class="text-gray-500 text-sm">Total</p>
+            <p class="text-xl font-bold text-gray-800">{{ summary.total }}</p>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <p class="text-gray-500 text-sm">In Stock</p>
+            <p class="text-xl font-bold text-green-600">{{ summary.in_stock }}</p>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <p class="text-gray-500 text-sm">Assigned</p>
+            <p class="text-xl font-bold text-blue-600">{{ summary.assigned }}</p>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <p class="text-gray-500 text-sm">Available</p>
+            <p class="text-xl font-bold text-green-500">{{ summary.available }}</p>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <p class="text-gray-500 text-sm">In Use</p>
+            <p class="text-xl font-bold text-yellow-600">{{ summary.in_use }}</p>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <p class="text-gray-500 text-sm">Damaged</p>
+            <p class="text-xl font-bold text-red-600">{{ summary.damaged }}</p>
+          </div>
+        </div>
     </div>
 
     <!-- Responsive Table -->

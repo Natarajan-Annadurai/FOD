@@ -15,9 +15,6 @@
     </h1>
     <div class="flex flex-wrap gap-3 mt-4">
       <!-- Assign Tools Button -->
-      <button type="submit" class="px-5 py-2 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
-        Assign Tools
-      </button>
       <a href="{% url 'service_station_list' %}" class="px-5 py-2 bg-red-600 text-white font-semibold rounded shadow hover:bg-red-700 transition">
         Service Station
       </a>
@@ -44,6 +41,13 @@
 
   <form method="post">
     {% csrf_token %}
+       <!-- Assign Tools Button at Top -->
+  <div class="mb-4">
+    <button type="submit"
+            class="px-5 py-2 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
+      Assign Tools
+    </button>
+  </div>
     <table class="min-w-full border border-gray-300 text-sm">
       <thead class="bg-gray-200 text-gray-700">
         <tr>
@@ -99,7 +103,6 @@
         {% endfor %}
       </tbody>
     </table>
-
   </form>
 </div>
 </body>

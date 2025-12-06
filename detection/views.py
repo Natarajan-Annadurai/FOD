@@ -2,11 +2,11 @@ import json
 import smtplib
 import socket
 import ssl
-
-import certifi
+import time
+from django.contrib.auth import login as auth_login
 import pdfkit
 from datetime import datetime
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage
@@ -14,63 +14,73 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, FileResponse, HttpResponse
 from django.template.loader import render_to_string
 from django.utils import timezone
-
+from django.views.decorators.cache import never_cache
 from mysite import settings
-from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Unit, Aircraft, JobToolUsage, \
+from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Aircraft, JobToolUsage, \
     JobAuditLog, JobCardNotes
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib import messages
 from django.contrib.auth.models import User
 from .models import ToolEventTracking
-from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
 from django.core.cache import cache
+from django.contrib import messages
+from django.views.decorators.csrf import csrf_exempt
 
 MAX_FAILED_ATTEMPTS = 3
-LOCKOUT_TIME = 1 * 60  # 5 minutes in seconds
+LOCKOUT_TIME = 1 * 60  # 1 minute in seconds
 
 @csrf_exempt
 def login_view(request):
+    lockout_remaining = 0  # default
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
 
-        # Check if user is locked
         lockout_key = f'lockout_{username}'
         failed_key = f'failed_{username}'
+        lockout_time_key = f'lockout_time_{username}'
 
+        # Check if account is locked
         if cache.get(lockout_key):
-            messages.error(request, 'Account locked due to too many failed login attempts. Try again after 5 minutes.')
-            return render(request, 'login.html')
+            lockout_start = cache.get(lockout_time_key, time.time())
+            elapsed = time.time() - lockout_start
+            lockout_remaining = max(0, int(LOCKOUT_TIME - elapsed))
+            messages.error(request, f'Account locked. Try again in {lockout_remaining} seconds.')
+            return render(request, 'login.html', {'lockout_remaining': lockout_remaining})
 
         user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            # Reset failed attempts on successful login
+        if user:
             cache.delete(failed_key)
-            login(request, user)
+            cache.delete(lockout_key)
+            cache.delete(lockout_time_key)
+            auth_login(request, user)
             return redirect('dashboard')
+
+        # Failed login
+        failed_attempts = cache.get(failed_key, 0) + 1
+        cache.set(failed_key, failed_attempts, LOCKOUT_TIME)
+
+        if failed_attempts >= MAX_FAILED_ATTEMPTS:
+            cache.set(lockout_key, True, LOCKOUT_TIME)
+            cache.set(lockout_time_key, time.time(), LOCKOUT_TIME)
+            lockout_remaining = LOCKOUT_TIME
+            messages.error(request, f'Your account is locked for {LOCKOUT_TIME} seconds.')
         else:
-            # Increment failed attempts
-            failed_attempts = cache.get(failed_key, 0) + 1
-            cache.set(failed_key, failed_attempts, LOCKOUT_TIME)
+            remaining = MAX_FAILED_ATTEMPTS - failed_attempts
+            messages.error(request, f'Invalid login. {remaining} attempts left.')
 
-            if failed_attempts >= MAX_FAILED_ATTEMPTS:
-                cache.set(lockout_key, True, LOCKOUT_TIME)
-                messages.error(request,
-                               'Account locked due to too many failed login attempts. Try again after 15 minutes.')
-            else:
-                remaining_attempts = MAX_FAILED_ATTEMPTS - failed_attempts
-                messages.error(request, f'Invalid credentials. {remaining_attempts} attempts left.')
-
-    return render(request, 'login.html')
+    return render(request, 'login.html', {'lockout_remaining': lockout_remaining})
 
 @login_required
+@never_cache
 def dashboard_view(request):
     return render(request, 'dashboard.html')
 
 def logout_view(request):
     logout(request)
+    messages.info(request, "You have successfully logged out.")
     return redirect('login')
 
 def add_user(request):
@@ -965,7 +975,7 @@ def tool_activity_dashboard(request):
     }
     return render(request, 'tool_activity_dashboard.html', context)
 
-from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch, Avg
+from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch, Avg, Sum
 
 
 def tools_in_use(request):
@@ -1150,7 +1160,16 @@ def inventory_view(request):
             'lastUpdated': item.last_updated.strftime('%Y-%m-%d %H:%M'),
             'remarks': item.remarks or '',
         })
-    return render(request, 'inventory.html', {'inventory_data': inventory_data})
+
+        summary = {
+            "total": sum(item['totalQuantity'] for item in inventory_data),
+            "in_stock": sum(item['inStock'] for item in inventory_data),
+            "assigned": sum(item['assignedQuantity'] for item in inventory_data),
+            "available": sum(item['availableQuantity'] for item in inventory_data),
+            "in_use": sum(item['inUse'] for item in inventory_data),
+            "damaged": sum(item['damaged'] for item in inventory_data),
+        }
+    return render(request, 'inventory.html', {'inventory_data': inventory_data, 'summary': summary})
 
 @login_required
 def create_service_station(request):
@@ -1649,6 +1668,7 @@ def get_client_ip(request):
 
 @csrf_exempt
 def receive_detections(request):
+    print("[DEBUG] receive_detections called from IP:", get_client_ip(request))
     if request.method != "POST":
         return JsonResponse({"status": "error", "message": "Only POST allowed"}, status=405)
 
