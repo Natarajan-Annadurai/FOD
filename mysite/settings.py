@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -46,12 +47,24 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'detection.middleware.IPRestrictMiddleware',
+    'detection.middleware.AutoLogoutMiddleware',
+    'detection.middleware.LoginAndNoCacheMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",
+    }
+}
+
+LOGIN_URL = 'login'
 
 ROOT_URLCONF = 'mysite.urls'
 
@@ -143,3 +156,8 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # Create a verified SSL context using certifi
 EMAIL_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+
+TESTING = False
+
+if 'pytest' in sys.modules:
+    TESTING = True

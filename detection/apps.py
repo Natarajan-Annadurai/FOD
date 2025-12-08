@@ -17,4 +17,4 @@ class DetectionConfig(AppConfig):
         t.start()
 
 
-# python manage.py runserver 192.168.0.113:8000
+# python manage.py runserver 192.168.0.110:8000

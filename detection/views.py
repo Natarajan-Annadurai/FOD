@@ -2,11 +2,11 @@ import json
 import smtplib
 import socket
 import ssl
-
-import certifi
+import time
+from django.contrib.auth import login as auth_login
 import pdfkit
 from datetime import datetime
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage
@@ -14,35 +14,73 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, FileResponse, HttpResponse
 from django.template.loader import render_to_string
 from django.utils import timezone
-
+from django.views.decorators.cache import never_cache
 from mysite import settings
-from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Unit, Aircraft, JobToolUsage, \
+from .models import ToolCreation, ToolPurchase, UserProfile, ProfileInformation, JobCard, Aircraft, JobToolUsage, \
     JobAuditLog, JobCardNotes
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib import messages
 from django.contrib.auth.models import User
 from .models import ToolEventTracking
+from django.contrib.auth import authenticate
+from django.core.cache import cache
+from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 
+MAX_FAILED_ATTEMPTS = 3
+LOCKOUT_TIME = 1 * 60  # 1 minute in seconds
 
 @csrf_exempt
 def login_view(request):
+    lockout_remaining = 0  # default
+
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
+
+        lockout_key = f'lockout_{username}'
+        failed_key = f'failed_{username}'
+        lockout_time_key = f'lockout_time_{username}'
+
+        # Check if account is locked
+        if cache.get(lockout_key):
+            lockout_start = cache.get(lockout_time_key, time.time())
+            elapsed = time.time() - lockout_start
+            lockout_remaining = max(0, int(LOCKOUT_TIME - elapsed))
+            messages.error(request, f'Account locked. Try again in {lockout_remaining} seconds.')
+            return render(request, 'login.html', {'lockout_remaining': lockout_remaining})
+
         user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            login(request, user)
+        if user:
+            cache.delete(failed_key)
+            cache.delete(lockout_key)
+            cache.delete(lockout_time_key)
+            auth_login(request, user)
             return redirect('dashboard')
-        else:
-            messages.error(request, 'Invalid username or password')
 
-    return render(request, 'login.html')
+        # Failed login
+        failed_attempts = cache.get(failed_key, 0) + 1
+        cache.set(failed_key, failed_attempts, LOCKOUT_TIME)
+
+        if failed_attempts >= MAX_FAILED_ATTEMPTS:
+            cache.set(lockout_key, True, LOCKOUT_TIME)
+            cache.set(lockout_time_key, time.time(), LOCKOUT_TIME)
+            lockout_remaining = LOCKOUT_TIME
+            messages.error(request, f'Your account is locked for {LOCKOUT_TIME} seconds.')
+        else:
+            remaining = MAX_FAILED_ATTEMPTS - failed_attempts
+            messages.error(request, f'Invalid login. {remaining} attempts left.')
+
+    return render(request, 'login.html', {'lockout_remaining': lockout_remaining})
+
+@login_required
+@never_cache
+def dashboard_view(request):
+    return render(request, 'dashboard.html')
 
 def logout_view(request):
     logout(request)
+    messages.info(request, "You have successfully logged out.")
     return redirect('login')
 
 def add_user(request):
@@ -76,6 +114,10 @@ def add_user(request):
 
         if User.objects.filter(username=username).exists():
             messages.error(request, "Username already exists.")
+            return redirect("add_user")
+
+        if User.objects.filter(email=email).exists():
+            messages.error(request, "Email already exists.")
             return redirect("add_user")
 
         if password != confirm_password:
@@ -332,11 +374,6 @@ def delete_user(request, user_id):
     messages.success(request, f"User {username} deleted successfully!")
     return redirect("manage_users")
 
-@login_required
-def dashboard(request):
-    return render(request, 'dashboard.html')
-
-
 def centralized_service_station_dashboard(request):
     service_stations = ServiceStation.objects.all()
 
@@ -440,10 +477,19 @@ def service_station_report(request, station_id):
                 tray.tray_tools.values_list('inventory__tool__tool_name', flat=True)
             )
 
+            # Clean None values
+            tray_tools = [tool for tool in tray_tools if tool]
+
+            # Set status based on tools
+            if tray_tools:
+                tray_status = "AVAILABLE"
+            else:
+                tray_status = getattr(tray, 'status', 'N/A')
+
             tray_details.append({
                 'name': tray.tray_name,
                 'tools': tray_tools,
-                'status': 'N/A'
+                'status': tray_status  # ← UPDATED
             })
 
         trays_count += unit_trays_count
@@ -486,6 +532,7 @@ def service_station_report(request, station_id):
 
     return render(request, 'dashboard/service_station_report.html', context)
 
+
 def get_service_station_report_context(station_id):
     station = ServiceStation.objects.get(id=station_id)
 
@@ -506,8 +553,11 @@ def get_service_station_report_context(station_id):
     for unit in units:
         trays = Tray.objects.filter(unit=unit)
 
+        # Get tray names
+        tray_names = [t.tray_name for t in trays]
+
         # Count tools assigned to this UNIT via tray tools
-        tools_in_unit = Inventory.objects.filter(traytool__tray__unit=unit).count()
+        tools_in_unit = TrayTool.objects.filter(tray__unit=unit).count()
 
         jobcards_in_unit = JobCard.objects.filter(assigned_units=unit).count()
         technicians_in_unit = User.objects.filter(
@@ -516,32 +566,30 @@ def get_service_station_report_context(station_id):
 
         tray_details = []
         for tray in trays:
-            # Step 1: get all TrayTool relations for this tray
-            tray_tool_links = TrayTool.objects.filter(tray=tray)
+            # Get tool names
+            tray_tools = list(
+                tray.tray_tools.values_list('inventory__tool__tool_name', flat=True)
+            )
 
-            # Step 2: fetch Inventory items using inventory_id, NOT id
-            tray_tools_qs = Inventory.objects.filter(
-                inventory_id__in=tray_tool_links.values_list('tool_id', flat=True)
-            ).select_related('tool')  # ensures tool FK is loaded
+            # Clean up None values
+            tray_tools = [tool for tool in tray_tools if tool]
 
-            tray_tools_list = []
-            for t in tray_tools_qs:
-                # safely get the tool name
-                tool_name = getattr(t.tool, "name", None) \
-                            or getattr(t.tool, "tool_name", None) \
-                            or getattr(t.tool, "title", None) \
-                            or str(t.tool)
-                tray_tools_list.append(tool_name)
+            # Determine status based on whether tools exist
+            if tray_tools:  # If there are tools
+                tray_status = "AVAILABLE"
+            else:
+                tray_status = getattr(tray, 'status', 'N/A')
 
             tray_details.append({
                 "name": tray.tray_name,
-                "tools": tray_tools_list,
-                "status": getattr(tray, 'status', 'N/A')
+                "tools": tray_tools,
+                "status": tray_status
             })
 
         unit_details.append({
             "name": unit.name,
-            "trays": [t.tray_name for t in trays],
+            "trays": tray_names,
+            "trays_count": trays.count(),
             "tools_count": tools_in_unit,
             "jobcards_count": jobcards_in_unit,
             "technicians": [
@@ -559,6 +607,8 @@ def get_service_station_report_context(station_id):
         service_station=station
     ).order_by('-created_at')
 
+    from django.utils.timezone import now
+
     context = {
         "station": station,
         "units_count": units_count,
@@ -570,11 +620,12 @@ def get_service_station_report_context(station_id):
         "technicians": [
             tech.get_full_name() or tech.username for tech in technicians
         ],
-        "jobcards": jobcards
+        "jobcards": jobcards,
+        "current_date": now(),
+        "for_pdf": True
     }
 
     return context
-
 
 # ----------------- PDF GENERATION -----------------
 
@@ -928,7 +979,7 @@ def tool_activity_dashboard(request):
     }
     return render(request, 'tool_activity_dashboard.html', context)
 
-from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch, Avg
+from django.db.models import Subquery, OuterRef, DateTimeField, Prefetch, Avg, Sum
 
 
 def tools_in_use(request):
@@ -1113,7 +1164,16 @@ def inventory_view(request):
             'lastUpdated': item.last_updated.strftime('%Y-%m-%d %H:%M'),
             'remarks': item.remarks or '',
         })
-    return render(request, 'inventory.html', {'inventory_data': inventory_data})
+
+        summary = {
+            "total": sum(item['totalQuantity'] for item in inventory_data),
+            "in_stock": sum(item['inStock'] for item in inventory_data),
+            "assigned": sum(item['assignedQuantity'] for item in inventory_data),
+            "available": sum(item['availableQuantity'] for item in inventory_data),
+            "in_use": sum(item['inUse'] for item in inventory_data),
+            "damaged": sum(item['damaged'] for item in inventory_data),
+        }
+    return render(request, 'inventory.html', {'inventory_data': inventory_data, 'summary': summary})
 
 @login_required
 def create_service_station(request):
@@ -1194,11 +1254,33 @@ def create_unit(request, station_id):
     }
     return render(request, 'create_unit.html', context)
 
-
 @login_required
 def delete_unit(request, station_id, unit_id):
     station = get_object_or_404(ServiceStation, id=station_id)
     unit = get_object_or_404(Unit, id=unit_id, station=station)
+
+    # 1️⃣ Check if any trays exist under this unit
+    has_trays = Tray.objects.filter(unit=unit).exists()
+    if has_trays:
+        messages.error(request,
+            "Cannot delete this Unit. Trays are assigned under this unit. Delete them first.")
+        return redirect('create_unit', station_id=station.id)
+
+    # 2️⃣ Check if unit is assigned to any JobCards
+    is_assigned_jobcard = JobCard.objects.filter(assigned_units=unit).exists()
+    if is_assigned_jobcard:
+        messages.error(request,
+            "Unit cannot be deleted. It is assigned to one or more Job Cards.")
+        return redirect('create_unit', station_id=station.id)
+
+    # 3️⃣ Check if unit is involved in any Tool Usage
+    used_in_tool_usage = JobToolUsage.objects.filter(unit=unit).exists()
+    if used_in_tool_usage:
+        messages.error(request,
+            "Unit cannot be deleted. It is linked to tool usage history.")
+        return redirect('create_unit', station_id=station.id)
+
+    # 4️⃣ Safe to delete
     unit.delete()
     messages.success(request, "Unit deleted successfully.")
     return redirect('create_unit', station_id=station.id)
@@ -1228,6 +1310,13 @@ def edit_service_station(request, pk):
 @login_required
 def delete_service_station(request, pk):
     station = get_object_or_404(ServiceStation, pk=pk)
+
+    is_assigned = JobCard.objects.filter(service_station=station).exists()
+
+    if is_assigned:
+        messages.error(request, "Cannot delete. This service station is assigned to one or more job cards.")
+        return redirect('service_station_list')
+
     station.delete()
     messages.success(request, "Service station deleted successfully.")
     return redirect('service_station_list')
@@ -1297,30 +1386,46 @@ def edit_tray(request, tray_id):
 @login_required
 def delete_tray(request, tray_id):
     tray = get_object_or_404(Tray, id=tray_id)
-    unit_id = tray.unit.id
+
+    # Check if any tools are assigned in TrayTool
+    has_tools = TrayTool.objects.filter(tray=tray).exists()
+
+    if has_tools:
+        messages.error(request,
+            "Cannot delete this tray. Tools are assigned to this tray. Remove them first.")
+        return redirect('create_tray', unit_id=tray.unit.id)
+
+    # Check if tray is linked with any JobCard (via JobToolUsage)
+    in_job_usage = JobToolUsage.objects.filter(tray=tray).exists()
+
+    if in_job_usage:
+        messages.error(request,
+            "Tray cannot be deleted. It is associated with one or more Job Cards.")
+        return redirect('create_tray', unit_id=tray.unit.id)
+
+    # Safe to delete
     tray.delete()
-    return redirect('create_tray', unit_id=unit_id)
+    messages.success(request, "Tray deleted successfully.")
+    return redirect('create_tray', unit_id=tray.unit.id)
 
 from django.db.models import Q, F, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
+
+from django.db.models import Sum
 
 def assign_tools(request, tray_id):
     tray = get_object_or_404(Tray, id=tray_id)
     search_query = request.GET.get('search', '')
 
-    # Subquery to fetch existing assigned quantity per inventory item for this tray
     traytool_subquery = TrayTool.objects.filter(
         tray=tray,
         inventory=OuterRef('pk')
     ).values('assigned_quantity')[:1]
 
-    # Include assigned quantity from TrayTool (default 0 if not assigned)
     inventory_items = Inventory.objects.select_related('tool').annotate(
         assigned_in_tray=Coalesce(Subquery(traytool_subquery, output_field=IntegerField()), Value(0)),
-        updated_at_in_tray = Subquery(traytool_subquery.values('updated_at')[:1], output_field=DateTimeField())
     )
 
-    # Apply search filter
     if search_query:
         inventory_items = inventory_items.filter(
             Q(tool__tool_name__icontains=search_query) |
@@ -1331,6 +1436,46 @@ def assign_tools(request, tray_id):
         )
 
     if request.method == 'POST':
+
+        # ✅ 1. Get current total assigned in this tray
+        current_total = TrayTool.objects.filter(tray=tray).aggregate(
+            total=Sum('assigned_quantity')
+        )['total'] or 0
+
+        # ✅ 2. Calculate new total after POST
+        new_total = current_total
+
+        for key, value in request.POST.items():
+            if not key.startswith('assign_qty_'):
+                continue
+
+            inventory_id = key.replace('assign_qty_', '').strip()
+            if not inventory_id:
+                continue
+
+            try:
+                assign_qty = int(value) if value.strip() else 0
+            except ValueError:
+                assign_qty = 0
+
+            inventory_item = get_object_or_404(Inventory, inventory_id=inventory_id)
+            existing = TrayTool.objects.filter(tray=tray, inventory=inventory_item).first()
+
+            old_qty = existing.assigned_quantity if existing else 0
+
+            # Adjust total for capacity check
+            new_total = new_total - old_qty + assign_qty
+
+        # ✅ 3. Enforce maximum tray capacity
+        if tray.max_capacity and new_total > tray.max_capacity:
+            messages.error(
+                request,
+                f"Tray capacity exceeded! Max: {tray.max_capacity}, "
+                f"Attempted: {new_total}"
+            )
+            return redirect('assign_tools', tray_id=tray.id)
+
+        # ✅ 4. Proceed with normal save logic if capacity is valid
         for key, value in request.POST.items():
             if not key.startswith('assign_qty_'):
                 continue
@@ -1347,33 +1492,29 @@ def assign_tools(request, tray_id):
             remarks = request.POST.get(f'remarks_{inventory_id}', '').strip()
             inventory_item = get_object_or_404(Inventory, inventory_id=inventory_id)
             tool = inventory_item.tool
-
             existing_record = TrayTool.objects.filter(tray=tray, inventory=inventory_item).first()
 
-            # 🔄 If already assigned → update instead of create
             if existing_record:
-                # Calculate difference to adjust stock
                 diff = assign_qty - existing_record.assigned_quantity
+
                 if diff > 0 and diff > inventory_item.in_stock:
                     messages.error(
                         request,
-                        f"Cannot increase {tool.tool_name} to {assign_qty}. Only {inventory_item.in_stock} available."
+                        f"Cannot increase {tool.tool_name} to {assign_qty}. "
+                        f"Only {inventory_item.in_stock} available."
                     )
                     continue
 
-                # Adjust inventory stock based on difference
                 inventory_item.in_stock -= diff
                 inventory_item.assigned_quantity += diff
                 inventory_item.available_quantity = inventory_item.assigned_quantity
                 inventory_item.save()
 
-                # Update TrayTool record
                 existing_record.assigned_quantity = assign_qty
                 existing_record.remarks = remarks
                 existing_record.save()
 
             else:
-                # New assignment
                 if assign_qty > inventory_item.in_stock:
                     messages.error(
                         request,
@@ -1565,6 +1706,7 @@ def get_client_ip(request):
 
 @csrf_exempt
 def receive_detections(request):
+    print("[DEBUG] receive_detections called from IP:", get_client_ip(request))
     if request.method != "POST":
         return JsonResponse({"status": "error", "message": "Only POST allowed"}, status=405)
 
@@ -1856,6 +1998,13 @@ def aircraft_edit(request, pk):
 
 def aircraft_delete(request, pk):
     aircraft = get_object_or_404(Aircraft, pk=pk)
+
+    jobcard_exists = JobCard.objects.filter(aircraft=aircraft).exists()
+
+    if jobcard_exists:
+        messages.error(request, "Cannot delete. This aircraft is assigned to one or more job cards.")
+        return redirect('aircraft_list')
+
     aircraft.delete()
     messages.success(request, "Aircraft deleted successfully.")
     return redirect('aircraft_list')
@@ -2140,6 +2289,7 @@ def jobcard_edit(request, job_id):
         job.job_description = request.POST.get('job_description')
         job.job_type = request.POST.get('job_type')
         job.priority = request.POST.get('priority')
+        job.status = request.POST.get('status')
         job.bay_id = request.POST.get('bay_id')
         job.reported_issues = request.POST.get('reported_issues')
 
