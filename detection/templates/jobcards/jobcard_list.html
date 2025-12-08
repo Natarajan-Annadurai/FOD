@@ -188,7 +188,9 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             {% for job in jobcards %}
-            <tr class="hover:bg-gray-50 transition">
+            <tr class="hover:bg-gray-50 transition"
+                data-status="{{ job.status|lower }}"
+                data-priority="{{ job.priority|lower }}">
               <td class="px-4 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -376,6 +378,17 @@
                   <option value="CRITICAL" {% if job.priority == "CRITICAL" %}selected{% endif %}>CRITICAL</option>
                 </select>
               </div>
+                <div>
+                <label class="block text-sm font-medium">Status</label>
+                <select name="status" class="border p-2 w-full rounded text-sm">
+                  <option value="">-- Select Status --</option>
+                  <option value="CREATED" {% if job.status == "CREATED" %}selected{% endif %}>CREATED</option>
+                  <option value="IN PROGRESS" {% if job.status == "IN PROGRESS" %}selected{% endif %}>IN PROGRESS</option>
+                  <option value="COMPLETED" {% if job.status == "COMPLETED" %}selected{% endif %}>COMPLETED</option>
+                  <option value="CLOSED" {% if job.status == "CLOSED" %}selected{% endif %}>CLOSED</option>
+                </select>
+              </div>
+
             </div>
           </div>
 
@@ -695,38 +708,31 @@
   const resetBtn = document.getElementById('reset-btn');
 
       function applyFilters() {
-      const searchTerm = searchInput.value.toLowerCase();
-      const statusVal = statusFilter.value.toLowerCase();
-      const priorityVal = priorityFilter.value.toLowerCase();
+          const searchTerm = searchInput.value.toLowerCase();
+          const statusVal = statusFilter.value.toLowerCase();
+          const priorityVal = priorityFilter.value.toLowerCase();
 
-      // Desktop rows
-      tableRows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        const statusMatch = statusVal === '' || text.includes(statusVal);
-        const priorityMatch = priorityVal === '' || text.includes(priorityVal);
-        const searchMatch = searchTerm === '' || text.includes(searchTerm);
+          tableRows.forEach(row => {
+            const rowStatus = row.getAttribute('data-status');
+            const rowPriority = row.getAttribute('data-priority');
+            const rowText = row.textContent.toLowerCase();
 
-        if (statusMatch && priorityMatch && searchMatch) {
-          row.style.display = '';
-        } else {
-          row.style.display = 'none';
+            const statusMatch = statusVal === '' || rowStatus === statusVal;
+            const priorityMatch = priorityVal === '' || rowPriority === priorityVal;
+            const searchMatch = searchTerm === '' || rowText.includes(searchTerm);
+
+            row.style.display = (statusMatch && priorityMatch && searchMatch) ? '' : 'none';
+          });
+
+          mobileCards.forEach(card => {
+            const text = card.textContent.toLowerCase();
+            const statusMatch = statusVal === '' || text.includes(statusVal);
+            const priorityMatch = priorityVal === '' || text.includes(priorityVal);
+            const searchMatch = searchTerm === '' || text.includes(searchTerm);
+
+            card.style.display = (statusMatch && priorityMatch && searchMatch) ? '' : 'none';
+          });
         }
-      });
-
-      // Mobile cards
-      mobileCards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        const statusMatch = statusVal === '' || text.includes(statusVal);
-        const priorityMatch = priorityVal === '' || text.includes(priorityVal);
-        const searchMatch = searchTerm === '' || text.includes(searchTerm);
-
-        if (statusMatch && priorityMatch && searchMatch) {
-          card.style.display = '';
-        } else {
-          card.style.display = 'none';
-        }
-      });
-    }
 
     // Filter button click
     filterBtn.addEventListener('click', applyFilters);

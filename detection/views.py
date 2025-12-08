@@ -116,6 +116,10 @@ def add_user(request):
             messages.error(request, "Username already exists.")
             return redirect("add_user")
 
+        if User.objects.filter(email=email).exists():
+            messages.error(request, "Email already exists.")
+            return redirect("add_user")
+
         if password != confirm_password:
             messages.error(request, "Passwords do not match.")
             return redirect("add_user")
@@ -1407,23 +1411,21 @@ def delete_tray(request, tray_id):
 from django.db.models import Q, F, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
 
+from django.db.models import Sum
+
 def assign_tools(request, tray_id):
     tray = get_object_or_404(Tray, id=tray_id)
     search_query = request.GET.get('search', '')
 
-    # Subquery to fetch existing assigned quantity per inventory item for this tray
     traytool_subquery = TrayTool.objects.filter(
         tray=tray,
         inventory=OuterRef('pk')
     ).values('assigned_quantity')[:1]
 
-    # Include assigned quantity from TrayTool (default 0 if not assigned)
     inventory_items = Inventory.objects.select_related('tool').annotate(
         assigned_in_tray=Coalesce(Subquery(traytool_subquery, output_field=IntegerField()), Value(0)),
-        updated_at_in_tray = Subquery(traytool_subquery.values('updated_at')[:1], output_field=DateTimeField())
     )
 
-    # Apply search filter
     if search_query:
         inventory_items = inventory_items.filter(
             Q(tool__tool_name__icontains=search_query) |
@@ -1434,6 +1436,46 @@ def assign_tools(request, tray_id):
         )
 
     if request.method == 'POST':
+
+        # ✅ 1. Get current total assigned in this tray
+        current_total = TrayTool.objects.filter(tray=tray).aggregate(
+            total=Sum('assigned_quantity')
+        )['total'] or 0
+
+        # ✅ 2. Calculate new total after POST
+        new_total = current_total
+
+        for key, value in request.POST.items():
+            if not key.startswith('assign_qty_'):
+                continue
+
+            inventory_id = key.replace('assign_qty_', '').strip()
+            if not inventory_id:
+                continue
+
+            try:
+                assign_qty = int(value) if value.strip() else 0
+            except ValueError:
+                assign_qty = 0
+
+            inventory_item = get_object_or_404(Inventory, inventory_id=inventory_id)
+            existing = TrayTool.objects.filter(tray=tray, inventory=inventory_item).first()
+
+            old_qty = existing.assigned_quantity if existing else 0
+
+            # Adjust total for capacity check
+            new_total = new_total - old_qty + assign_qty
+
+        # ✅ 3. Enforce maximum tray capacity
+        if tray.max_capacity and new_total > tray.max_capacity:
+            messages.error(
+                request,
+                f"Tray capacity exceeded! Max: {tray.max_capacity}, "
+                f"Attempted: {new_total}"
+            )
+            return redirect('assign_tools', tray_id=tray.id)
+
+        # ✅ 4. Proceed with normal save logic if capacity is valid
         for key, value in request.POST.items():
             if not key.startswith('assign_qty_'):
                 continue
@@ -1450,33 +1492,29 @@ def assign_tools(request, tray_id):
             remarks = request.POST.get(f'remarks_{inventory_id}', '').strip()
             inventory_item = get_object_or_404(Inventory, inventory_id=inventory_id)
             tool = inventory_item.tool
-
             existing_record = TrayTool.objects.filter(tray=tray, inventory=inventory_item).first()
 
-            # 🔄 If already assigned → update instead of create
             if existing_record:
-                # Calculate difference to adjust stock
                 diff = assign_qty - existing_record.assigned_quantity
+
                 if diff > 0 and diff > inventory_item.in_stock:
                     messages.error(
                         request,
-                        f"Cannot increase {tool.tool_name} to {assign_qty}. Only {inventory_item.in_stock} available."
+                        f"Cannot increase {tool.tool_name} to {assign_qty}. "
+                        f"Only {inventory_item.in_stock} available."
                     )
                     continue
 
-                # Adjust inventory stock based on difference
                 inventory_item.in_stock -= diff
                 inventory_item.assigned_quantity += diff
                 inventory_item.available_quantity = inventory_item.assigned_quantity
                 inventory_item.save()
 
-                # Update TrayTool record
                 existing_record.assigned_quantity = assign_qty
                 existing_record.remarks = remarks
                 existing_record.save()
 
             else:
-                # New assignment
                 if assign_qty > inventory_item.in_stock:
                     messages.error(
                         request,
@@ -2251,6 +2289,7 @@ def jobcard_edit(request, job_id):
         job.job_description = request.POST.get('job_description')
         job.job_type = request.POST.get('job_type')
         job.priority = request.POST.get('priority')
+        job.status = request.POST.get('status')
         job.bay_id = request.POST.get('bay_id')
         job.reported_issues = request.POST.get('reported_issues')
 
