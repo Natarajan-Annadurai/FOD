@@ -507,6 +507,7 @@ function openTools(trayId, trayName) {
             } else {
                 console.log(`Received ${data.length} tools`);
                 data.forEach(t => {
+                    if ((t.status || '').toUpperCase() === 'UNASSIGNED') return;
                     console.log(`Tool: ${t.name}, Status: ${t.status}, ID: ${t.tool_id}`);
 
                     // Normalize status
