@@ -87,7 +87,6 @@ def add_user(request):
     groups = Group.objects.all()
 
     if request.method == "POST":
-
         # AUTH USER FIELDS
         username = request.POST.get("username").strip()
         email = request.POST.get("email").strip()
@@ -107,29 +106,36 @@ def add_user(request):
         gender = request.POST.get("gender")
         profile_picture = request.FILES.get("profile_picture")
         role_id = request.POST.get("role")
-
         status = request.POST.get("status", "ACTIVE")
 
-        # -------- VALIDATIONS -------- #
+        errors = []
 
+        # -------- VALIDATIONS -------- #
         if User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists.")
-            return redirect("add_user")
+            errors.append("Username already exists.")
 
         if User.objects.filter(email=email).exists():
-            messages.error(request, "Email already exists.")
-            return redirect("add_user")
+            errors.append("Email already exists.")
 
         if password != confirm_password:
-            messages.error(request, "Passwords do not match.")
-            return redirect("add_user")
+            errors.append("Passwords do not match.")
 
         try:
             validate_password(password)
         except ValidationError as e:
-            for error in e:
+            errors.extend(e)
+
+        # If there are errors, render the template with existing data
+        if errors:
+            for error in errors:
                 messages.error(request, error)
-            return redirect("add_user")
+
+            # Pass back all entered data to the template
+            context = {
+                "groups": groups,
+                "form_data": request.POST,  # This contains all input values
+            }
+            return render(request, "users/add_user.html", context)
 
         # -------- CREATE USER -------- #
         user = User.objects.create_user(
@@ -163,21 +169,53 @@ def add_user(request):
         messages.success(request, "User created successfully!")
         return redirect("manage_users")
 
+    # GET request
     return render(request, "users/add_user.html", {"groups": groups})
 
 def create_role(request):
     if request.method == "POST":
-        role_name = request.POST.get("role_name")
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            role_name = data.get("role_name")
+        except:
+            return JsonResponse({"status": "error", "message": "Invalid data"}, status=400)
 
+        if not role_name:
+            return JsonResponse({"status": "error", "message": "Role name required"}, status=400)
+
+        # Check if role exists
         if Group.objects.filter(name=role_name).exists():
-            messages.error(request, "Role already exists.")
-        else:
-            Group.objects.create(name=role_name)
-            messages.success(request, "Role created successfully.")
+            return JsonResponse({"status": "error", "message": "Role already exists"}, status=400)
 
-        return redirect("add_user")   # return to your user creation page
+        # Create new group
+        group = Group.objects.create(name=role_name)
 
-    return redirect("add_user")
+        return JsonResponse({
+            "status": "success",
+            "role_id": group.id,
+            "role_name": group.name
+        })
+
+    return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
+
+def delete_role(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            role_id = data.get("role_id")
+        except:
+            return JsonResponse({"status": "error", "message": "Invalid data"}, status=400)
+
+        try:
+            group = Group.objects.get(id=role_id)
+        except Group.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "Role not found"}, status=404)
+
+        group.delete()
+
+        return JsonResponse({"status": "success", "message": "Role deleted successfully"})
+
+    return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
 
 from django.contrib.auth.models import Group
 
@@ -1761,6 +1799,12 @@ def receive_detections(request):
             except JobCard.DoesNotExist:
                 job_instance = JobCard.objects.create(job_id=data.get("jobcard_id") or job_id, created_by=user_id)
 
+            # Auto-update status when any note arrives
+            if job_instance.status == "CREATED":
+                job_instance.status = "IN PROGRESS"
+                job_instance.save(update_fields=["status"])
+                print(f"[AUTO STATUS UPDATE] JobCard {job_instance.job_id} → IN PROGRESS")
+
             # Save note
             note = JobCardNotes.objects.create(
                 job=job_instance,
@@ -1800,6 +1844,12 @@ def receive_detections(request):
 
         # Fetch JobCard
         job_instance, _ = JobCard.objects.get_or_create(job_id=job_id, defaults={"created_by": user_id})
+
+        # Auto-update status when any event arrives
+        if job_instance.status == "CREATED":
+            job_instance.status = "IN PROGRESS"
+            job_instance.save(update_fields=["status"])
+            print(f"[AUTO STATUS UPDATE] JobCard {job_instance.job_id} → IN PROGRESS")
 
         # Save ToolEventTracking
         status_map = {
@@ -2020,7 +2070,6 @@ def jobcard_list(request):
     # Calculate summary counts
     total_jobcards = jobcards.count()
     in_progress_count = jobcards.filter(status='IN_PROGRESS').count()
-    completed_count = jobcards.filter(status='COMPLETED').count()
     high_priority_count = jobcards.filter(priority='HIGH').count()
     critical_count = jobcards.filter(priority='CRITICAL').count()
 
@@ -2044,7 +2093,6 @@ def jobcard_list(request):
         'mechanics': mechanics,
         'qa_users': qa_users,
         'in_progress_count': in_progress_count,
-        'completed_count': completed_count,
         'high_priority_count': high_priority_count,
         'critical_count': critical_count,
     }

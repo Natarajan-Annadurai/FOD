@@ -14,9 +14,15 @@
 </head>
 <body class="bg-gray-50 text-gray-800">
   <div class="max-w-6xl mx-auto p-6">
-    <header class="mb-6">
-      <h1 class="text-2xl font-bold">Tool Creation</h1>
-    </header>
+
+   <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Tool Creation</h1>
+
+        <a href="{% url 'dashboard' %}"
+           class="px-5 py-2 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
+            Dashboard
+        </a>
+    </div>
 
     <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Form -->
@@ -79,7 +85,6 @@
           <div class="flex gap-2 mt-2">
             <button type="submit" id="saveBtn" class="flex-1 px-4 py-2 bg-green-600 text-white rounded">Save</button>
             <button type="button" id="resetBtn" class="px-4 py-2 bg-gray-200 rounded">Reset</button>
-            <button type="button" id="backBtn" class="px-4 py-2 bg-blue-500 text-white rounded" onclick="window.location.href='{% url 'dashboard' %}'">Back</button>
           </div>
         </form>
       </section>

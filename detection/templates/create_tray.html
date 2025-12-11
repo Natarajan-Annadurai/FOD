@@ -67,20 +67,27 @@
                 class="border px-3 py-2 w-full rounded" rows="2">{{ edit_tray.remarks|default_if_none:'' }}</textarea>
     </div>
 
-    <button type="submit"
-            class="px-4 py-2 {{ edit_tray|yesno:'bg-yellow-500 hover:bg-yellow-600,bg-blue-500 hover:bg-blue-600' }} text-white rounded">
-      {% if edit_tray %} Update Tray {% else %} + Create Tray {% endif %}
-    </button>
+    <div class="flex gap-3 mt-4">
+        <button type="submit"
+                class="px-4 py-2 {{ edit_tray|yesno:'bg-yellow-500 hover:bg-yellow-600,bg-blue-500 hover:bg-blue-600' }} text-white rounded">
+          {% if edit_tray %} Update Tray {% else %} + Create Tray {% endif %}
+        </button>
 
-    <a href="{% url 'service_station_list' %}"
-       class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-       Service Station
-    </a>
+        <a href="{% url 'service_station_list' %}"
+           class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+           Service Station
+        </a>
 
-    <a href="{% url 'create_unit' station_id=unit.station.id %}"
-       class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-       Back
-    </a>
+        <a href="{% url 'create_tray' unit.id %}"
+           class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+            Reset
+        </a>
+
+        <a href="{% url 'create_unit' station_id=unit.station.id %}"
+           class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+           Back
+        </a>
+    </div>
   </form>
 
   <!-- Existing Trays Table -->
