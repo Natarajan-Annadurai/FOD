@@ -58,7 +58,8 @@
                     <span class="text-red-500">*</span>
                 </label>
                 <input type="text" name="username" required
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
+                   value="{{ form_data.username|default:'' }}"
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -66,7 +67,8 @@
                     <i class="fas fa-envelope text-blue-500 mr-1"></i>Email
                 </label>
                 <input type="email" name="email"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
+                   value="{{ form_data.email|default:'' }}"
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -74,8 +76,8 @@
                     <i class="fas fa-lock text-blue-500 mr-1"></i>Password
                     <span class="text-red-500">*</span>
                 </label>
-                <input type="password" name="password" required
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
+               <input type="password" name="password" id="password" required
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -83,7 +85,7 @@
                     <i class="fas fa-lock text-blue-500 mr-1"></i>Confirm Password
                     <span class="text-red-500">*</span>
                 </label>
-                <input type="password" name="confirm_password" required
+               <input type="password" name="confirm_password" id="confirm_password" required
                     class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
             </div>
 
@@ -91,8 +93,9 @@
                 <label class="block font-medium text-gray-700 mb-1">
                     <i class="fas fa-signature text-blue-500 mr-1"></i>First Name
                 </label>
-                <input type="text" name="first_name"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
+               <input type="text" name="first_name"
+               value="{{ form_data.first_name|default:'' }}"
+               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -113,26 +116,36 @@
                 </div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group col-span-2">
                 <label class="block font-medium text-gray-700 mb-1">
                     <i class="fas fa-users text-purple-500 mr-1"></i>Select Role
                     <span class="text-red-500">*</span>
                 </label>
-                <select name="role" id="role-select" required
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200">
-                    <option value="">Select Role</option>
-                    {% for group in groups %}
-                        <option value="{{ group.id }}">{{ group.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
 
-            <div class="flex items-end">
-                <button type="button"
-                    onclick="openRoleModal()"
-                    class="w-full p-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center">
-                    <i class="fas fa-plus mr-2"></i>Create New Role
-                </button>
+                <div class="flex flex-wrap gap-3 items-end">
+                    <!-- Role Dropdown -->
+                    <select name="role" id="role-select" required
+                        class="flex-1 min-w-[200px] p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200">
+                        <option value="">Select Role</option>
+                        {% for group in groups %}
+                            <option value="{{ group.id }}">{{ group.name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- Create Role Button -->
+                    <button type="button"
+                        onclick="openRoleModal()"
+                        class="px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center">
+                        <i class="fas fa-plus mr-2"></i>Create Role
+                    </button>
+
+                    <!-- Delete Role Button -->
+                    <button type="button"
+                        onclick="openDeleteRoleModal()"
+                        class="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 flex items-center">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- PROFILE INFORMATION SECTION -->
@@ -150,7 +163,8 @@
                     <i class="fas fa-phone text-indigo-500 mr-1"></i>Phone
                 </label>
                 <input type="text" name="phone"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                       value="{{ form_data.phone|default:'' }}"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -158,7 +172,8 @@
                     <i class="fas fa-building text-indigo-500 mr-1"></i>Department
                 </label>
                 <input type="text" name="department"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                       value="{{ form_data.department|default:'' }}"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -166,7 +181,8 @@
                     <i class="fas fa-map-marker-alt text-indigo-500 mr-1"></i>Location
                 </label>
                 <input type="text" name="location"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                       value="{{ form_data.location|default:'' }}"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -174,7 +190,8 @@
                     <i class="fas fa-id-badge text-indigo-500 mr-1"></i>Employee ID
                 </label>
                 <input type="text" name="employee_id"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                       value="{{ form_data.employee_id|default:'' }}"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -182,7 +199,8 @@
                     <i class="fas fa-briefcase text-indigo-500 mr-1"></i>Designation
                 </label>
                 <input type="text" name="designation"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                       value="{{ form_data.designation|default:'' }}"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
             </div>
 
             <div class="form-group">
@@ -190,7 +208,8 @@
                     <i class="fas fa-birthday-cake text-indigo-500 mr-1"></i>Date of Birth
                 </label>
                 <input type="date" name="date_of_birth"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                       value="{{ form_data.date_of_birth|default:'' }}"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
             </div>
 
             <div class="col-span-2 form-group">
@@ -198,19 +217,18 @@
                     <i class="fas fa-home text-indigo-500 mr-1"></i>Address
                 </label>
                 <textarea name="address" rows="3"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"></textarea>
+                          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">{{ form_data.address|default:'' }}</textarea>
             </div>
 
             <div class="form-group">
                 <label class="block font-medium text-gray-700 mb-1">
                     <i class="fas fa-venus-mars text-indigo-500 mr-1"></i>Gender
                 </label>
-                <select name="gender"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
+                <select name="gender" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200">
                     <option value="">Select Gender</option>
-                    <option>Male</option>
-                    <option>Female</option>
-                    <option>Other</option>
+                    <option value="Male" {% if form_data.gender == "Male" %}selected{% endif %}>Male</option>
+                    <option value="Female" {% if form_data.gender == "Female" %}selected{% endif %}>Female</option>
+                    <option value="Other" {% if form_data.gender == "Other" %}selected{% endif %}>Other</option>
                 </select>
             </div>
 
@@ -280,68 +298,156 @@
                    class="w-full sm:w-auto px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow">
                     <i class="fas fa-arrow-left mr-2"></i>Back to User Management
                 </a>
-                <button type="submit"
-                    class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-800 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center">
-                    <i class="fas fa-user-plus mr-2"></i>Create User
-                </button>
+               <div class="flex gap-4 w-full sm:w-auto">
+                    <!-- Reset Button -->
+                    <button type="reset"
+                        class="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center">
+                        <i class="fas fa-undo mr-2"></i>Reset
+                    </button>
+
+                    <!-- Submit Button -->
+                    <button type="submit"
+                        class="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-800 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center">
+                        <i class="fas fa-user-plus mr-2"></i>Create User
+                    </button>
+               </div>
             </div>
         </form>
     </div>
 
     <!-- ROLE CREATION MODAL -->
     <div id="roleModal"
-         class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
-        <div class="bg-white w-full max-w-md p-6 rounded-xl shadow-2xl transform transition-all duration-300 scale-95">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold text-gray-800 flex items-center">
-                    <i class="fas fa-user-tag text-purple-500 mr-2"></i>Create New Role
-                </h2>
-                <button onclick="closeRoleModal()" class="text-gray-500 hover:text-gray-700">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
+     class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+
+            <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+                <h2 class="text-xl font-semibold mb-4">Create New Role</h2>
+
+                <form id="roleCreateForm">
+                    {% csrf_token %}
+                    <label class="block font-medium text-gray-700 mb-1">Role Name</label>
+                    <input type="text" id="role_name" name="role_name" required
+                           class="w-full p-3 border border-gray-300 rounded-lg mb-4">
+
+                    <div class="flex justify-end gap-3">
+                        <button type="button" onclick="closeRoleModal()"
+                                class="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+
+                        <button type="submit"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+                    </div>
+                </form>
             </div>
+        </div>
 
-            <form method="POST" action="{% url 'create_role' %}">
-                {% csrf_token %}
+    <div id="roleDeleteModal"
+         class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
 
-                <label class="block font-medium text-gray-700 mb-1">Role Name</label>
-                <input type="text" name="role_name" required
-                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 mb-4">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h2 class="text-xl font-semibold text-red-600 mb-4">Delete Role</h2>
+            <p class="mb-4 text-gray-700">Are you sure you want to delete this role?</p>
 
-                <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="closeRoleModal()"
-                            class="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200">
-                        Cancel
-                    </button>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeDeleteRoleModal()"
+                        class="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
 
-                    <button type="submit"
-                            class="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200">
-                        Save Role
-                    </button>
-                </div>
-            </form>
+                <button onclick="deleteRole()"
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg">Delete</button>
+            </div>
         </div>
     </div>
 
     <!-- MODAL SCRIPT -->
     <script>
+        function openDeleteRoleModal() {
+            const selected = document.getElementById("role-select").value;
+            if (!selected) {
+                alert("Please select a role to delete.");
+                return;
+            }
+            document.getElementById("roleDeleteModal").classList.remove("hidden");
+        }
+
+        function closeDeleteRoleModal() {
+            document.getElementById("roleDeleteModal").classList.add("hidden");
+        }
+
+        function deleteRole() {
+            const roleId = document.getElementById("role-select").value;
+            const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]").value;
+
+            fetch("{% url 'delete_role' %}", {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": csrfToken,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ role_id: roleId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+
+                    // Remove from dropdown
+                    const roleSelect = document.getElementById("role-select");
+                    const option = roleSelect.querySelector(`option[value='${roleId}']`);
+                    if (option) option.remove();
+
+                    roleSelect.value = "";  // Reset select
+
+                    closeDeleteRoleModal();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(err => console.error("Error:", err));
+        }
+
         function openRoleModal() {
             document.getElementById("roleModal").classList.remove("hidden");
-            setTimeout(() => {
-                document.getElementById("roleModal").querySelector('.bg-white').classList.remove('scale-95');
-                document.getElementById("roleModal").querySelector('.bg-white').classList.add('scale-100');
-            }, 10);
         }
 
         function closeRoleModal() {
-            document.getElementById("roleModal").querySelector('.bg-white').classList.remove('scale-100');
-            document.getElementById("roleModal").querySelector('.bg-white').classList.add('scale-95');
-            setTimeout(() => {
-                document.getElementById("roleModal").classList.add("hidden");
-            }, 200);
+            document.getElementById("roleModal").classList.add("hidden");
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+       document.getElementById("roleCreateForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+
+        const roleName = document.getElementById("role_name").value;
+        const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]").value;
+
+        fetch("{% url 'create_role' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrfToken,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ role_name: roleName })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+
+                // Add new role to dropdown
+                const roleSelect = document.getElementById("role-select");
+                const option = document.createElement("option");
+                option.value = data.role_id;
+                option.textContent = data.role_name;
+                roleSelect.appendChild(option);
+
+                // Auto-select new role
+                roleSelect.value = data.role_id;
+
+                // Close modal
+                closeRoleModal();
+            } else {
+                alert("Error: " + data.message);
+            }
+        })
+        .catch(error => console.error("Error:", error));
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('profile_picture');
     const fileUploadArea = document.getElementById('file-upload-area');
     const uploadPlaceholder = document.getElementById('upload-placeholder');
@@ -434,7 +540,17 @@
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 });
-    </script>
+        document.querySelector("form").addEventListener("submit", function(e) {
+            const password = document.getElementById("password").value;
+            const confirmPassword = document.getElementById("confirm_password").value;
 
+            if (password !== confirmPassword) {
+                e.preventDefault();  // Prevent form submission
+                alert("Passwords do not match!");
+                document.getElementById("confirm_password").focus();
+                return false;
+            }
+        });
+    </script>
 </body>
 </html>
