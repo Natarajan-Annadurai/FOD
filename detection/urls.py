@@ -67,8 +67,6 @@ urlpatterns = [
     path('jobcards/<str:job_id>/', views.jobcard_detail, name='jobcard_detail'),
     path('jobcards/<str:job_id>/close/', views.jobcard_close, name='jobcard_close'),
 
-
-
     path('logout/', views.logout_view, name='logout'),
 ]
 

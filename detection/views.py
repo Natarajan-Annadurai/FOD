@@ -211,6 +211,13 @@ def delete_role(request):
         except Group.DoesNotExist:
             return JsonResponse({"status": "error", "message": "Role not found"}, status=404)
 
+        assigned_users = group.user_set.all()
+        if assigned_users.exists():
+            return JsonResponse({
+                "status": "error",
+                "message": "Role cannot be deleted because it is assigned to one or more users."
+            }, status=400)
+
         group.delete()
 
         return JsonResponse({"status": "success", "message": "Role deleted successfully"})
