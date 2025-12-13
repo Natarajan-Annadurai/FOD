@@ -14,7 +14,6 @@
 
     .status-created { background-color: #dbeafe; color: #1e40af; }
     .status-in-progress { background-color: #fef3c7; color: #d97706; }
-    .status-completed { background-color: #d1fae5; color: #065f46; }
     .status-closed { background-color: #e5e7eb; color: #374151; }
 
     .card-shadow {
@@ -370,7 +369,6 @@
                   <option value="">-- Select Status --</option>
                   <option value="CREATED" {% if job.status == "CREATED" %}selected{% endif %}>CREATED</option>
                   <option value="IN PROGRESS" {% if job.status == "IN PROGRESS" %}selected{% endif %}>IN PROGRESS</option>
-                  <option value="COMPLETED" {% if job.status == "COMPLETED" %}selected{% endif %}>COMPLETED</option>
                   <option value="CLOSED" {% if job.status == "CLOSED" %}selected{% endif %}>CLOSED</option>
                 </select>
               </div>
