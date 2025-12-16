@@ -10,10 +10,15 @@ python_files = tests.py test_*.py *_tests.py
 
 step 3:
 Run tests and generate HTML report, yse this command
-pytest --html=report.html --self-contained-html
+
+
 
 pytest detection/tests_unit/test_login.py --html=login_test_report.html --self-contained-html
 pytest detection/tests_unit/test_dashboard.py --html=test_dashboard_report.html --self-contained-html
 pytest detection/tests_unit/test_user.py --html=test_user_report.html --self-contained-html
 pytest detection/tests_unit/test_tool_creation.py --html=test_tool_creation_report.html --self-contained-html
 pytest detection/tests_unit/test_aircraft.py --html=test_aircraft_report.html --self-contained-html
+pytest detection/tests_unit/test_service_station.py --html =test_service_station_report.html --self-contained-html
+pytest detection/tests_unit/test_unit.py --html =test_unit_report.html --self-contained-html
+pytest detection/tests_unit/test_tray.py --html =test_tray_report.html --self-contained-html
+pytest detection/tests_unit/test_job card.py --html =test_job card_report.html --self-contained-html

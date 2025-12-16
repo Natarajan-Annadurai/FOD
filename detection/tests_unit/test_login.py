@@ -4,6 +4,7 @@ from django.core.cache import cache
 from django.urls import reverse
 from detection.views import LOCKOUT_TIME
 
+
 class LoginPageTests(TestCase):
     def setUp(self):
         self.client = Client()
