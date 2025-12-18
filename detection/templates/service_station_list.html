@@ -6,61 +6,192 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 font-sans">
 
-<div class="max-w-6xl mx-auto mt-10 bg-white shadow-lg rounded-lg p-6">
+<!-- SWEETALERT FOR MESSAGES -->
+{% if messages %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    {% for message in messages %}
+        Swal.fire({
+            icon: '{% if message.tags == "error" %}error{% elif message.tags == "success" %}success{% else %}info{% endif %}',
+            title: '{{ message }}',
+            confirmButtonColor: '#3085d6'
+        });
+    {% endfor %}
+</script>
+{% endif %}
+
+<div class="max-w-7xl mx-auto mt-10 px-4">
   <!-- Header -->
-  <div class="flex items-center justify-between mb-4 border-b pb-3">
-    <!-- Title on the left -->
-    <h1 class="text-2xl font-semibold text-gray-700">Service Stations</h1>
-
-    <!-- Buttons container aligned to the right -->
-    <div class="flex gap-2">
-      <a href="{% url 'create_service_station' %}"
-         class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6">
+    <h1 class="text-3xl font-bold text-gray-700 mb-4 sm:mb-0">Service Stations</h1>
+    <div class="flex gap-3 flex-wrap">
+      <button id="openStationModal" class="px-5 py-2 bg-blue-600 text-white font-semibold rounded shadow hover:bg-blue-700 transition">
         + Add Station
-      </a>
-      <a href="{% url 'dashboard' %}"
-         class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">
-         Dashboard
+      </button>
+      <a href="{% url 'dashboard' %}" class="px-5 py-2 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
+        Dashboard
       </a>
     </div>
   </div>
 
-  <!-- Service Station Table -->
-  <table class="min-w-full border border-gray-300 text-sm">
-    <thead class="bg-gray-200 text-gray-700">
-      <tr>
-        <th class="px-4 py-2 border">S No</th>
-        <th class="px-4 py-2 border">Station Name</th>
-        <th class="px-4 py-2 border">Location</th>
-        <th class="px-4 py-2 border">Manager</th>
-        <th class="px-4 py-2 border text-center">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for station in stations %}
-      <tr class="hover:bg-gray-50">
-        <td class="border px-4 py-2 text-center">{{ forloop.counter }}</td>
-        <td class="border px-4 py-2">{{ station.name }}</td>
-        <td class="border px-4 py-2">{{ station.location }}</td>
-        <td class="border px-4 py-2">{{ station.manager.username|default:"—" }}</td>
-        <td class="border px-4 py-2 text-center">
-          <a href="{% url 'create_unit' station.id %}"
-             class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
-            Add Unit
-          </a>
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="5" class="text-center py-4 text-gray-500">
-          No service stations available
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <!-- Table Container -->
+  <div class="bg-white shadow rounded-lg overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-medium">
+        <tr>
+          <th class="px-6 py-3 text-left">S No</th>
+          <th class="px-6 py-3 text-left">Station Name</th>
+          <th class="px-6 py-3 text-left">Location</th>
+          <th class="px-6 py-3 text-left">Manager</th>
+          <th class="px-6 py-3 text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        {% for station in stations %}
+        <tr class="hover:bg-gray-50 transition">
+          <td class="px-6 py-4">{{ forloop.counter }}</td>
+          <td class="px-6 py-4 font-medium text-gray-700">{{ station.name }}</td>
+          <td class="px-6 py-4">{{ station.location|default:'—' }}</td>
+          <td class="px-6 py-4">{{ station.manager.username|default:"—" }}</td>
+          <td class="px-6 py-4 text-center">
+            <div class="flex justify-center gap-2 flex-wrap">
+              <a href="{% url 'create_unit' station.id %}" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition">
+                Add Unit
+              </a>
+              <button onclick="openEditModal('{{ station.id }}', '{{ station.name }}', '{{ station.location }}', '{{ station.manager.username|default:'' }}')" class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition">
+                Edit
+              </button>
+              <form action="{% url 'delete_service_station' station.id %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete this station?');">
+                {% csrf_token %}
+                <button type="submit" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition">
+                  Delete
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="px-6 py-4 text-center text-gray-400">
+            No service stations available
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<!-- EDIT MODAL -->
+<div id="editModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden justify-center items-center z-50">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-6 animate-fadeIn">
+    <h2 class="text-2xl font-semibold mb-4">Edit Service Station</h2>
+    <form id="editForm" method="POST" class="space-y-4">
+      {% csrf_token %}
+      <input type="hidden" id="editStationId" name="station_id">
+      <div>
+        <label class="block font-medium text-gray-700">Station Name</label>
+        <input type="text" id="editName" name="name" class="w-full border rounded px-3 py-2 focus:ring focus:ring-blue-200">
+      </div>
+      <div>
+        <label class="block font-medium text-gray-700">Location</label>
+        <input type="text" id="editLocation" name="location" class="w-full border rounded px-3 py-2 focus:ring focus:ring-blue-200">
+      </div>
+      <div>
+        <label class="block font-medium text-gray-700">Manager</label>
+        <input type="text" id="editManager" name="manager" class="w-full border rounded px-3 py-2 focus:ring focus:ring-blue-200">
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Update</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- CREATE MODAL -->
+<div id="stationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-lg w-full max-w-md shadow-lg animate-fadeIn">
+    <h2 class="text-2xl font-semibold mb-4">Create Service Station</h2>
+    <form id="stationForm" method="post" action="{% url 'create_service_station' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block font-medium text-gray-700">Station Name</label>
+        <input type="text" name="name" required class="w-full border rounded px-3 py-2">
+      </div>
+      <div>
+        <label class="block font-medium text-gray-700">Location</label>
+        <input type="text" name="location" class="w-full border rounded px-3 py-2">
+      </div>
+      <div>
+        <label class="block font-medium text-gray-700">Manager</label>
+        <select name="manager" class="w-full border rounded px-3 py-2">
+          <option value="">Select Manager</option>
+          {% for user in users %}
+            <option value="{{ user.id }}">{{ user.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block font-medium text-gray-700">Remarks</label>
+        <textarea name="remarks" class="w-full border rounded px-3 py-2"></textarea>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" id="closeStationModal" class="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditModal(id, name, location, manager) {
+  document.getElementById('editStationId').value = id;
+  document.getElementById('editName').value = name;
+  document.getElementById('editLocation').value = location;
+  document.getElementById('editManager').value = manager;
+  document.getElementById('editModal').classList.remove('hidden');
+  document.getElementById('editModal').classList.add('flex');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.add('hidden');
+  document.getElementById('editModal').classList.remove('flex');
+}
+
+document.getElementById('editForm').addEventListener('submit', function(event) {
+  event.preventDefault();
+  const id = document.getElementById('editStationId').value;
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  const formData = {
+    name: document.getElementById('editName').value,
+    location: document.getElementById('editLocation').value,
+    manager: document.getElementById('editManager').value
+  };
+
+  fetch(`/service-station/${id}/edit/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify(formData)
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.status === 'success') location.reload();
+    else alert('Error updating station');
+  });
+});
+
+const stationModal = document.getElementById('stationModal');
+document.getElementById('openStationModal').addEventListener('click', () => {
+  stationModal.classList.remove('hidden');
+});
+document.getElementById('closeStationModal').addEventListener('click', () => {
+  stationModal.classList.add('hidden');
+});
+window.addEventListener('click', e => { if(e.target === stationModal) stationModal.classList.add('hidden'); });
+</script>
+
 </body>
 </html>

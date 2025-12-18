@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centralized Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
+        .status-available { background-color: #d1fae5; color: #065f46; }
+        .status-issued { background-color: #fee2e2; color: #991b1b; }
+        .status-maintenance { background-color: #fef3c7; color: #92400e; }
+        .status-in-progress { background-color: #dbeafe; color: #1e40af; }
+        .status-closed { background-color: #dcfce7; color: #166534; }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen p-4 md:p-6">
+
+    <!-- Header Section -->
+    <header class="mb-8">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Centralized Maintenance Dashboard</h1>
+                <p class="text-gray-600">Monitor and manage all service stations, units, and tools in one place</p>
+            </div>
+            <div class="mt-4 md:mt-0">
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <a href="{% url 'dashboard' %}" class="px-5 py-2 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
+                            Dashboard
+                        </a>
+                    </div>
+                    <div class="bg-white rounded-full p-2 shadow-sm">
+                        <i class="fas fa-bell text-gray-600"></i>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <span class="hidden md:block font-medium text-gray-700">
+                            {{ request.user.get_full_name|default:request.user.username }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                <div>
+                    <p class="text-gray-500 text-sm">Total Stations</p>
+                    <h3 class="text-2xl font-bold text-gray-800">{{ dashboard_data|length }}</h3>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-lg">
+                    <i class="fas fa-building text-blue-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                        <div>
+                            <p class="text-gray-500 text-sm">Total Units</p>
+                            <h3 class="text-2xl font-bold text-gray-800">{{ total_units }}</h3>
+                            </div>
+                        </div>
+                <div class="bg-green-100 p-3 rounded-lg">
+                    <i class="fas fa-cube text-green-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                        <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                                <div>
+                                    <p class="text-gray-500 text-sm">Total Tools</p>
+                                    <h3 class="text-2xl font-bold text-gray-800">{{ total_tools }}</h3>
+                                </div>
+                            </div>
+                <div class="bg-purple-100 p-3 rounded-lg">
+                    <i class="fas fa-tools text-purple-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                    <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between card-hover">
+                        <div>
+                            <p class="text-gray-500 text-sm">Open Jobcards</p>
+                            <h3 class="text-2xl font-bold text-gray-800">{{ total_jobcards }}</h3>
+                        </div>
+                    </div>
+                <div class="bg-yellow-100 p-3 rounded-lg">
+                    <i class="fas fa-clipboard-list text-yellow-500 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <!-- Navigation Tabs -->
+        <div class="border-b border-gray-200">
+            <nav class="flex -mb-px">
+                <button class="py-4 px-6 text-center border-b-2 border-blue-500 font-medium text-blue-600 flex items-center justify-center space-x-2">
+                    <i class="fas fa-building"></i>
+                    <span>Service Stations</span>
+                </button>
+                <button class="py-4 px-6 text-center border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 flex items-center justify-center space-x-2">
+                    <i class="fas fa-cube"></i>
+                    <span>Units</span>
+                </button>
+                <button class="py-4 px-6 text-center border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 flex items-center justify-center space-x-2">
+                    <i class="fas fa-tools"></i>
+                    <span>Tools</span>
+                </button>
+                <button class="py-4 px-6 text-center border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 flex items-center justify-center space-x-2">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Jobcards</span>
+                </button>
+            </nav>
+        </div>
+
+        <!-- SERVICE STATION LIST -->
+        <div id="serviceStationPage" class="p-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-800">Service Stations</h2>
+                <div class="mt-2 md:mt-0 flex space-x-2">
+                    <button class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-50">
+                        <i class="fas fa-filter"></i>
+                        <span>Filter</span>
+                    </button>
+                    <a href="{% url 'service_station_list' %}">
+                        <button class="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-600">
+                            <i class="fas fa-plus"></i>
+                            <span>Add Station</span>
+                        </button>
+                    </a>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Station</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Units</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trays</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tools</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jobcards</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Technicians</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Station Report</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in dashboard_data %}
+                        <tr class="hover:bg-blue-50 transition-colors duration-200 fade-in">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <button class="text-blue-600 font-medium flex items-center space-x-2 group"
+                                        onclick="openUnits('{{ item.station.id }}', '{{ item.station.name }}')">
+                                    <i class="fas fa-building text-gray-400 group-hover:text-blue-500"></i>
+                                    <span class="group-hover:underline">{{ item.station.name }}</span>
+                                </button>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {{ item.units_count }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ item.trays_count }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ item.tools_count }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center space-x-2">
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                                        {{ item.jobcard_count }}
+                                    </span>
+                                    <a href="{% url 'jobcard_list_by_station' item.station.id %}"
+                                       class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-600 transition-colors duration-200">
+                                        View
+                                    </a>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <button
+                                    onclick="openTechModal({{ forloop.counter0 }})"
+                                    class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200
+                                           {% if item.technicians %}
+                                               text-white bg-green-500 hover:bg-green-600
+                                           {% else %}
+                                               text-gray-400 bg-gray-100 cursor-not-allowed
+                                           {% endif %}"
+                                    {% if not item.technicians %} disabled {% endif %}>
+                                    <i class="fas fa-user mr-1"></i>
+                                    View ({{ item.technicians|length }})
+                                </button>
+                            </td>
+                            <td>
+                            <a href="{% url 'service_station_report' item.station.id %}"
+                               class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors inline-flex items-center space-x-1">
+                                <i class="fas fa-file-pdf text-[10px]"></i>
+                                <span class="whitespace-nowrap">Service Station Report</span>
+                            </a>
+                        </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- UNITS PAGE -->
+        <div id="unitsPage" class="hidden p-6">
+            <div class="flex items-center mb-6">
+                <button onclick="backToStations()" class="text-blue-600 hover:text-blue-800 flex items-center space-x-2 mr-4">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Back to Stations</span>
+                </button>
+                <h2 class="text-xl font-semibold text-gray-800">
+                    Units in: <span id="selectedStation" class="text-blue-600"></span>
+                </h2>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trays</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tools</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unitTable" class="bg-white divide-y divide-gray-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TRAYS PAGE -->
+        <div id="traysPage" class="hidden p-6">
+            <div class="flex items-center mb-6">
+                <button onclick="backToUnits()" class="text-blue-600 hover:text-blue-800 flex items-center space-x-2 mr-4">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Back to Units</span>
+                </button>
+                <h2 class="text-xl font-semibold text-gray-800">
+                    Trays in: <span id="selectedUnit" class="text-blue-600"></span>
+                </h2>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tray ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tray Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tool Count</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trayTable" class="bg-white divide-y divide-gray-200"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TOOLS PAGE -->
+        <div id="toolsPage" class="hidden p-6">
+            <div class="flex items-center mb-6">
+                <button onclick="backToTrays()" class="text-blue-600 hover:text-blue-800 flex items-center space-x-2 mr-4">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Back to Trays</span>
+                </button>
+                <h2 class="text-xl font-semibold text-gray-800">
+                    Tools in: <span id="selectedTray" class="text-blue-600"></span>
+                </h2>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tool Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tool ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="toolTable" class="bg-white divide-y divide-gray-200"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Technician Modal -->
+    <div id="techModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-md mx-4 slide-in">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-800">Technicians</h2>
+                <button onclick="closeTechModal()" class="text-gray-400 hover:text-gray-600 text-2xl">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="relative mb-4">
+                    <input id="techSearch" type="text" placeholder="Search technician..."
+                           class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                </div>
+                <ul id="techList" class="space-y-3 max-h-64 overflow-y-auto"></ul>
+                <div id="noTechMessage" class="text-center text-gray-500 py-4 hidden">
+                    <i class="fas fa-users text-3xl mb-2"></i>
+                    <p>No technicians assigned to this station</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-center text-gray-500 text-sm">
+        <p>Centralized Maintenance Dashboard &copy; 2025. All rights reserved.</p>
+    </footer>
+
+<script>
+/* -------------------------
+   PAGE NAVIGATION
+------------------------- */
+function openUnits(stationId, stationName) {
+    // Show loading state
+    document.getElementById("unitTable").innerHTML = `
+        <tr>
+            <td colspan="4" class="px-6 py-8 text-center">
+                <div class="flex justify-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+                <p class="mt-2 text-gray-500">Loading units...</p>
+            </td>
+        </tr>`;
+
+    fetch(`/api/station/${stationId}/units/`)
+        .then(res => res.json())
+        .then(data => {
+            let table = "";
+            if (data.length === 0) {
+                table = `
+                    <tr>
+                        <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-cube text-3xl mb-2"></i>
+                            <p>No units found in this station</p>
+                        </td>
+                    </tr>`;
+            } else {
+                data.forEach(u => {
+                    const statusClass = getStatusClass(u.status);
+                    table += `
+                        <tr class="hover:bg-blue-50 cursor-pointer transition-colors duration-200 fade-in"
+                            onclick="openTrays('${u.unit_id}', '${u.name.replace("'", "\\'")}')">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-cube text-blue-600"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">${u.name}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                                    ${u.status}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${u.tray_count}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${u.tool_count}</td>
+                        </tr>`;
+                });
+            }
+            document.getElementById("unitTable").innerHTML = table;
+            document.getElementById("selectedStation").textContent = stationName;
+            document.getElementById("serviceStationPage").classList.add("hidden");
+            document.getElementById("unitsPage").classList.remove("hidden");
+        })
+        .catch(error => {
+            console.error('Error fetching units:', error);
+            document.getElementById("unitTable").innerHTML = `
+                <tr>
+                    <td colspan="4" class="px-6 py-8 text-center text-red-500">
+                        <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                        <p>Error loading units. Please try again.</p>
+                    </td>
+                </tr>`;
+        });
+}
+
+function backToStations() {
+    document.getElementById("unitsPage").classList.add("hidden");
+    document.getElementById("serviceStationPage").classList.remove("hidden");
+}
+
+function openTrays(unitId, unitName) {
+    // Show loading state
+    document.getElementById("trayTable").innerHTML = `
+        <tr>
+            <td colspan="4" class="px-6 py-8 text-center">
+                <div class="flex justify-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+                <p class="mt-2 text-gray-500">Loading trays...</p>
+            </td>
+        </tr>`;
+
+    fetch(`/api/unit/${unitId}/trays/`)
+        .then(res => res.json())
+        .then(data => {
+            let table = "";
+            if (data.length === 0) {
+                table = `
+                    <tr>
+                        <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-inbox text-3xl mb-2"></i>
+                            <p>No trays found in this unit</p>
+                        </td>
+                    </tr>`;
+            } else {
+                data.forEach(t => {
+                    const status = t.available_tools > 0 ? "Active" : "Empty";
+                    const statusClass = status === "Active" ? "status-available" : "status-maintenance";
+
+                    table += `
+                        <tr class="hover:bg-blue-50 cursor-pointer transition-colors duration-200 fade-in"
+                            onclick="openTools('${t.tray_id}', '${t.tray_name.replace("'", "\\'")}')">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${t.tray_id_original}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${t.tray_name}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex space-x-2">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium status-available">
+                                        Available: ${t.available_tools}
+                                    </span>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium status-issued">
+                                        In Use: ${t.inuse_tools}
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                                    <i class="fas ${status === 'Active' ? 'fa-check' : 'fa-exclamation'} mr-1"></i> ${status}
+                                </span>
+                            </td>
+                        </tr>`;
+                });
+            }
+            document.getElementById("trayTable").innerHTML = table;
+            document.getElementById("selectedUnit").textContent = unitName;
+            document.getElementById("unitsPage").classList.add("hidden");
+            document.getElementById("traysPage").classList.remove("hidden");
+        })
+        .catch(error => {
+            console.error('Error fetching trays:', error);
+            document.getElementById("trayTable").innerHTML = `
+                <tr>
+                    <td colspan="4" class="px-6 py-8 text-center text-red-500">
+                        <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                        <p>Error loading trays. Please try again.</p>
+                    </td>
+                </tr>`;
+        });
+}
+
+function backToUnits() {
+    document.getElementById("traysPage").classList.add("hidden");
+    document.getElementById("unitsPage").classList.remove("hidden");
+}
+
+function openTools(trayId, trayName) {
+    // Show loading state
+    document.getElementById("toolTable").innerHTML = `
+        <tr>
+            <td colspan="3" class="px-6 py-8 text-center">
+                <div class="flex justify-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+                <p class="mt-2 text-gray-500">Loading tools...</p>
+            </td>
+        </tr>`;
+
+    console.log(`Fetching tools for tray: ${trayId}, ${trayName}`);
+
+    fetch(`/api/tray/${trayId}/tools/`)
+        .then(res => {
+            console.log(`Response status: ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            console.log("API Response data:", data);
+
+            let table = "";
+            if (data.length === 0) {
+                console.log("No tools returned from API");
+                table = `
+                    <tr>
+                        <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-tools text-3xl mb-2"></i>
+                            <p>No tools found in this tray</p>
+                        </td>
+                    </tr>`;
+            } else {
+                console.log(`Received ${data.length} tools`);
+                data.forEach(t => {
+                    if ((t.status || '').toUpperCase() === 'UNASSIGNED') return;
+                    console.log(`Tool: ${t.name}, Status: ${t.status}, ID: ${t.tool_id}`);
+
+                    // Normalize status
+                    let status = (t.status || '').toUpperCase();
+                    status = status.split(' ')[0];   // Fix "AVAILABLE (3)"
+                    status = status.replace(' ', '-'); // Fix "IN USE"
+
+                    table += `
+                        <tr class="border-b fade-in">
+                            <td class="px-6 py-4 whitespace-nowrap">${t.name}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${t.tool_id || 'N/A'}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="${
+                                    status === 'IN-USE'
+                                        ? 'text-orange-600 font-semibold'
+                                        : status === 'AVAILABLE'
+                                        ? 'text-green-600 font-semibold'
+                                        : 'text-gray-700'
+                                }">
+                                    ${t.status || 'NO STATUS'}
+                                </span>
+                            </td>
+                        </tr>`;
+                });
+            }
+
+            document.getElementById("toolTable").innerHTML = table;
+            document.getElementById("selectedTray").textContent = trayName;
+
+            // Hide other pages and show tools page
+            document.getElementById("serviceStationPage").classList.add("hidden");
+            document.getElementById("unitsPage").classList.add("hidden");
+            document.getElementById("traysPage").classList.add("hidden");
+            document.getElementById("toolsPage").classList.remove("hidden");
+        })
+        .catch(error => {
+            console.error('Error fetching tools:', error);
+            document.getElementById("toolTable").innerHTML = `
+                <tr>
+                    <td colspan="3" class="px-6 py-8 text-center text-red-500">
+                        <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                        <p>Error loading tools. Please try again.</p>
+                        <p class="text-sm mt-1">${error.message}</p>
+                    </td>
+                </tr>`;
+        });
+}
+
+function backToTrays() {
+    document.getElementById("toolsPage").classList.add("hidden");
+    document.getElementById("traysPage").classList.remove("hidden");
+}
+
+/* -------------------------
+   TECHNICIAN MODAL
+------------------------- */
+// Store technicians data from Django template
+const techniciansData = [
+    {% for item in dashboard_data %}
+        [
+            {% for tech in item.technicians %}
+                {
+                    name: "{{ tech.tech_name }}",
+                    id: "{{ tech.tech_id }}",
+                    assigned_at: "{{ tech.assigned_at|date:'d M Y H:i' }}"
+                },
+            {% endfor %}
+        ],
+    {% endfor %}
+];
+
+function openTechModal(index) {
+    const modal = document.getElementById('techModal');
+    const list = document.getElementById('techList');
+    const noTechMessage = document.getElementById('noTechMessage');
+
+    list.innerHTML = '';
+
+    const techs = techniciansData[index];
+
+    if (techs.length === 0) {
+        noTechMessage.classList.remove('hidden');
+        list.classList.add('hidden');
+    } else {
+        noTechMessage.classList.add('hidden');
+        list.classList.remove('hidden');
+
+        techs.forEach(t => {
+            const li = document.createElement('li');
+            li.className = "bg-white border border-gray-200 rounded-lg p-4 shadow-sm transition-transform hover:scale-[1.02]";
+            li.innerHTML = `
+                <div class="flex items-start">
+                    <div class="flex-shrink-0 h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-user text-green-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-sm font-medium text-gray-900">${t.name}</div>
+                        <div class="text-sm text-gray-500">ID: ${t.id}</div>
+                        <div class="text-xs text-gray-400 mt-1">Assigned: ${t.assigned_at}</div>
+                    </div>
+                </div>`;
+            list.appendChild(li);
+        });
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeTechModal() {
+    const modal = document.getElementById('techModal');
+    modal.classList.add('hidden');
+}
+
+// Close modal when clicking outside content
+document.getElementById('techModal').addEventListener('click', function(e) {
+    if(e.target === this) closeTechModal();
+});
+
+// Search filter inside technician modal
+document.getElementById('techSearch').addEventListener('input', function() {
+    const filter = this.value.toLowerCase();
+    const listItems = document.querySelectorAll('#techList li');
+    let visibleCount = 0;
+
+    listItems.forEach(li => {
+        const text = li.textContent.toLowerCase();
+        if (text.includes(filter)) {
+            li.style.display = '';
+            visibleCount++;
+        } else {
+            li.style.display = 'none';
+        }
+    });
+
+    // Show no results message if no items match
+    const noTechMessage = document.getElementById('noTechMessage');
+    if (visibleCount === 0 && listItems.length > 0) {
+        noTechMessage.classList.remove('hidden');
+    } else {
+        noTechMessage.classList.add('hidden');
+    }
+});
+
+/* -------------------------
+   UTILITY FUNCTIONS
+------------------------- */
+function getStatusClass(status) {
+    const statusMap = {
+        'ACTIVE': 'status-available',
+        'AVAILABLE': 'status-available',
+        'IN_PROGRESS': 'status-in-progress',
+        'IN-USE': 'status-issued',
+        'MAINTENANCE': 'status-maintenance',
+        'CLOSED': 'status-closed'
+    };
+    return statusMap[status] || 'status-maintenance';
+}
+</script>
+
+</body>
+</html>

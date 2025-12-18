@@ -2,8 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Login | MySite</title>
+    <title>Login | User Login</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(-45deg, #1f2937, #3b82f6, #1e40af, #111827);
+  background-size: 400% 400%;
+  animation: gradientMove 15s ease infinite;
+}
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.login-container {
+  background-color: rgba(255,255,255,0.9);
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+  width: 24rem;
+}
+.lockout-timer {
+  background-color: #FEF3C7;
+  color: #92400E;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+</style>
     <script>
         function togglePassword() {
             const passField = document.getElementById("password");
@@ -18,9 +50,17 @@
         }
     </script>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white p-8 rounded-2xl shadow-lg w-96">
-        <h2 class="text-2xl font-semibold text-center mb-6">User Login</h2>
+
+<body class="flex items-center justify-center min-h-screen relative">
+
+    <div class="login-container bg-white bg-opacity-95 p-8 rounded-2xl shadow-2xl">
+        <h2 class="text-2xl font-semibold text-center mb-6 text-gray-800">➡️ User Login</h2>
+
+        {% if lockout_remaining and lockout_remaining > 0 %}
+        <div id="lockout-timer" class="lockout-timer">
+            Account locked. Try again in <span id="timer">{{ lockout_remaining }}</span> seconds.
+        </div>
+        {% endif %}
 
         {% if messages %}
             {% for message in messages %}
@@ -30,7 +70,7 @@
             {% endfor %}
         {% endif %}
 
-        <form method="POST">
+        <form method="POST" {% if lockout_remaining and lockout_remaining > 0 %}onsubmit="return false;"{% endif %}>
             {% csrf_token %}
             <div class="mb-4">
                 <label class="block text-gray-700 mb-2">Username</label>
@@ -46,5 +86,25 @@
             <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition duration-200">Login</button>
         </form>
     </div>
+
+{% if lockout_remaining and lockout_remaining > 0 %}
+<script>
+let timeLeft = {{ lockout_remaining }};
+const timerSpan = document.getElementById('timer');
+const form = document.querySelector('form');
+
+const countdown = setInterval(() => {
+    timeLeft -= 1;
+    timerSpan.textContent = timeLeft;
+
+    if (timeLeft <= 0) {
+        clearInterval(countdown);
+        document.getElementById('lockout-timer').style.display = 'none';
+        form.onsubmit = null;  // re-enable form submission
+    }
+}, 1000);
+</script>
+{% endif %}
+
 </body>
 </html>

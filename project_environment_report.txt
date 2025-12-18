@@ -1,0 +1,45 @@
+=== PROJECT ENVIRONMENT REPORT ===
+
+>>> Python & Platform Info:
+Python Version: 3.13.7
+Implementation: CPython
+Platform: Windows
+Platform Version: 10.0.19045
+Architecture: 64bit
+
+>>> Installed Packages Used in Project:
+appdirs: 1.4.4
+asgiref: 3.11.0
+bandit: 1.9.2
+brotli: 1.2.0
+certifi: 2025.11.12
+cffi: 2.0.0
+colorama: 0.4.6
+django: 5.2.8
+fonttools: 4.60.1
+importlib_metadata: 8.7.0
+mdurl: 0.1.2
+pdfkit: 1.0.0
+pip: 25.3
+pycparser: 2.23
+pyee: 11.1.1
+pygments: 2.19.2
+pyphen: 0.17.2
+pyppeteer: 2.0.0
+rich: 14.2.0
+setuptools: 80.9.0
+sqlparse: 0.5.3
+stevedore: 5.6.0
+tinycss2: 1.5.1
+tqdm: 4.67.1
+typing_extensions: 4.15.0
+urllib3: 1.26.20
+vulture: 2.14
+webencodings: 0.5.1
+websockets: 10.4
+wheel: 0.45.1
+zipp: 3.23.0
+zopfli: 0.4.0
+
+Total installed packages used: 32
+Total Python files scanned: 5081

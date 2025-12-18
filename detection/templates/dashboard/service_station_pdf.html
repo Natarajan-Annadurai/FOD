@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Service Station Report - {{ station.name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Base Styles */
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11px;
+            color: #333;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+            background: #fff;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 100%;
+        }
+
+        /* Header Styles */
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2c5282;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #2c5282;
+            font-size: 24px;
+            margin: 0 0 5px 0;
+            font-weight: bold;
+        }
+
+        .header .subtitle {
+            color: #4a5568;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .report-meta {
+            text-align: right;
+            color: #718096;
+            font-size: 10px;
+            margin-top: 5px;
+        }
+
+        /* Station Info Card */
+        .info-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+        }
+
+        .info-value {
+            color: #2d3748;
+            font-size: 12px;
+        }
+
+        /* Stats Dashboard */
+        .stats-dashboard {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 25px 0;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c5282;
+            margin: 5px 0;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Units Section */
+        .units-section {
+            margin: 30px 0;
+        }
+
+        .section-title {
+            font-size: 16px;
+            color: #2c5282;
+            font-weight: bold;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-title i {
+            margin-right: 8px;
+        }
+
+        .unit-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .unit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .unit-name {
+            font-size: 14px;
+            font-weight: bold;
+            color: #2d3748;
+            margin: 0;
+        }
+
+        .unit-stats {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .unit-stat {
+            background: #edf2f7;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Tray Table */
+        .tray-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 10px;
+        }
+
+        .tray-table th {
+            background: #2c5282;
+            color: white;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 9px;
+            letter-spacing: 0.5px;
+        }
+
+        .tray-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        .tray-table tr:nth-child(even) {
+            background: #f7fafc;
+        }
+
+        .tray-table tr:hover {
+            background: #ebf8ff;
+        }
+
+        .tools-list {
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .status-available {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-na {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .status-maintenance {
+            background: #feebc8;
+            color: #744210;
+        }
+
+        .status-inactive {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        /* Jobcards Table */
+        .jobcards-section {
+            margin: 30px 0;
+        }
+
+        .jobcards-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+
+        .jobcards-table th {
+            background: #4c51bf;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 9px;
+        }
+
+        .jobcards-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .jobcard-status {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-created { background: #e2e8f0; color: #4a5568; }
+        .status-progress { background: #bee3f8; color: #2c5282; }
+        .status-completed { background: #c6f6d5; color: #22543d; }
+
+        /* Technicians Section */
+        .technicians-section {
+            margin: 30px 0;
+        }
+
+        .technicians-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .tech-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+            font-size: 10px;
+        }
+
+        .tech-avatar {
+            width: 32px;
+            height: 32px;
+            background: #2c5282;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 8px;
+            font-weight: bold;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 40px;
+            padding-top: 15px;
+            border-top: 2px solid #e2e8f0;
+            text-align: center;
+            color: #718096;
+            font-size: 9px;
+        }
+
+        /* Print Optimizations */
+        @media print {
+            .page-break {
+                page-break-before: always;
+            }
+
+            .unit-card {
+                page-break-inside: avoid;
+            }
+
+            .no-print {
+                display: none;
+            }
+        }
+
+        /* Utility Classes */
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .mb-0 { margin-bottom: 0; }
+        .mt-10 { margin-top: 10px; }
+        .mt-20 { margin-top: 20px; }
+        .mb-10 { margin-bottom: 10px; }
+        .mb-20 { margin-bottom: 20px; }
+        .color-blue { color: #2c5282; }
+        .color-gray { color: #718096; }
+
+        /* QR Code Section */
+        .qr-section {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            text-align: center;
+            background: white;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .qr-code {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 5px;
+        }
+
+        .qr-label {
+            font-size: 8px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>{{ station.name }} - Service Station Report</h1>
+        <p class="subtitle">Comprehensive overview of units, tools, technicians & jobcards</p>
+        <div class="report-meta">
+            Generated on: {{ current_date|date:"F j, Y, g:i a" }} |
+            Active Jobcards: {{ active_jobcards_count }}
+        </div>
+    </div>
+
+    <!-- Station Information -->
+    <div class="info-card">
+        <h3 class="section-title">📋 Station Information</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Location</span>
+                <span class="info-value">{{ station.location }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Manager</span>
+                <span class="info-value">
+                    {% if station.manager %}
+                        {{ station.manager.get_full_name|default:station.manager.username }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Contact</span>
+                <span class="info-value">{{ station.contact_phone }} • {{ station.contact_email }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Opening Hours</span>
+                <span class="info-value">{{ station.opening_hours }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <h3 class="section-title">📊 Quick Statistics</h3>
+    <div class="stats-dashboard">
+        <div class="stat-card">
+            <div class="stat-value">{{ units_count }}</div>
+            <div class="stat-label">Units</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ trays_count }}</div>
+            <div class="stat-label">Trays</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ tools_count }}</div>
+            <div class="stat-label">Tools</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ jobcards_count }}</div>
+            <div class="stat-label">Jobcards</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ technicians_count }}</div>
+            <div class="stat-label">Technicians</div>
+        </div>
+    </div>
+
+    <!-- Units Overview -->
+    <div class="units-section">
+        <h3 class="section-title">🏗️ Units Overview</h3>
+
+        {% for unit in unit_details %}
+        <div class="unit-card">
+            <div class="unit-header">
+                <h4 class="unit-name">{{ unit.name }}</h4>
+                <div class="unit-stats">
+                    <span class="unit-stat">📦 {{ unit.trays_count }} Trays</span>
+                    <span class="unit-stat">🔧 {{ unit.tools_count }} Tools</span>
+                    <span class="unit-stat">📋 {{ unit.jobcards_count }} Jobcards</span>
+                </div>
+            </div>
+
+            <!-- Tray Details -->
+            <table class="tray-table">
+                <thead>
+                    <tr>
+                        <th>Tray Name</th>
+                        <th>Tools</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tray in unit.tray_details %}
+                    <tr>
+                        <td><strong>{{ tray.name }}</strong></td>
+                        <td class="tools-list">
+                            {% if tray.tools %}
+                                {% for tool in tray.tools %}
+                                    <span class="tool-item">{{ tool }}{% if not forloop.last %}, {% endif %}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="color-gray">No tools assigned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="status-badge
+                                {% if tray.status == 'AVAILABLE' %}status-available
+                                {% elif tray.status == 'N/A' %}status-na
+                                {% elif tray.status == 'MAINTENANCE' %}status-maintenance
+                                {% else %}status-inactive{% endif %}">
+                                {{ tray.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center color-gray">No tray details available</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if unit.technicians %}
+            <div class="mt-10">
+                <strong>👨‍🔧 Assigned Technicians:</strong>
+                <span class="color-gray">{{ unit.technicians|join:", " }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Jobcards -->
+    <div class="jobcards-section">
+        <h3 class="section-title">📋 Jobcards</h3>
+        <table class="jobcards-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Description</th>
+                    <th>Unit</th>
+                    <th>Technician</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for jc in jobcards %}
+                <tr>
+                    <td><strong>{{ jc.job_id }}</strong></td>
+                    <td>{{ jc.job_title }}</td>
+                    <td>
+                        {% if jc.assigned_units.first %}
+                        <span class="unit-stat">{{ jc.assigned_units.first.name }}</span>
+                        {% else %}
+                        <span class="color-gray">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if jc.assigned_technicians.first %}
+                        <span class="tech-card">{{ jc.assigned_technicians.first.username }}</span>
+                        {% else %}
+                        <span class="color-gray">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="jobcard-status
+                            {% if jc.status == 'CREATED' %}status-created
+                            {% elif jc.status == 'IN PROGRESS' %}status-progress
+                            {% elif jc.status == 'COMPLETED' %}status-completed
+                            {% else %}status-created{% endif %}">
+                            {{ jc.status }}
+                        </span>
+                    </td>
+                    <td>{{ jc.created_at|date:"M d, Y" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center color-gray">No jobcards found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Technicians -->
+    <div class="technicians-section">
+        <h3 class="section-title">👥 Technicians</h3>
+        {% if technicians %}
+        <div class="technicians-grid">
+            {% for tech in technicians %}
+            <div class="tech-card">
+                <div class="tech-avatar">{{ tech|first|upper }}</div>
+                <div>{{ tech }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-center color-gray">No technicians assigned to this station</p>
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Service Station Report • {{ station.name }} • Generated on {{ current_date|date:"F j, Y" }}</p>
+        <p>This report is system generated. For any queries, contact {{ station.contact_email }}</p>
+    </div>
+
+</div>
+
+<script>
+    // PDF-specific optimizations
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add page numbers
+        var totalPages = Math.ceil(document.body.scrollHeight / 1123); // A4 height in pixels at 96dpi
+        for (var i = 1; i <= totalPages; i++) {
+            var pageNum = document.createElement('div');
+            pageNum.className = 'page-number';
+            pageNum.style.cssText = 'position: fixed; bottom: 10px; right: 20px; font-size: 9px; color: #718096;';
+            pageNum.textContent = 'Page ' + i + ' of ' + totalPages;
+            document.body.appendChild(pageNum);
+        }
+
+        // Color code stats based on values
+        var statValues = document.querySelectorAll('.stat-value');
+        statValues.forEach(function(stat) {
+            var value = parseInt(stat.textContent);
+            if (value === 0) {
+                stat.style.color = '#e53e3e'; // Red for zero
+            } else if (value > 10) {
+                stat.style.color = '#38a169'; // Green for high values
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
